@@ -1,0 +1,8 @@
+{
+    "board": "adafruit:samd:adafruit_pygamer_m4",
+    "configuration": "cache=on,speed=120,opt=faster,maxqspi=50,usbstack=tinyusb,debug=off",
+    "sketch": "lostIsland.ino",
+    "port": "/dev/tty.usbmodem14544301",
+    "programmer": "USBtinyISP",
+    "output": "../build"
+}
