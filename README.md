@@ -1,0 +1,3 @@
+# lostIsland
+
+A game idea to push Adafruit's pyGamer to it's limits and beyond...
