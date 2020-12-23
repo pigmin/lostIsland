@@ -12,10 +12,15 @@ uint16_t rgbTo565(uint8_t red, uint8_t green, uint8_t blue)
   return Rgb565;
 }
 
-void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int DIR, int light)
+void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int8_t DIR, int light)
 {
   uint16_t idx = 0;
-
+/*
+		int32_t fxs = 0, fxm = 1, fx = 0;
+		int32_t fys = 0, fym = 1, fy = 0;
+		if (flip & olc::Sprite::Flip::HORIZ) { fxs = sprite->width - 1; fxm = -1; }
+		if (flip & olc::Sprite::Flip::VERT) { fys = sprite->height - 1; fym = -1; }
+    */
   if (light < 0)
   {
 
@@ -66,11 +71,16 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
-            uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
-            uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
-            value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
-            canvas->drawPixel(xMove + i, yMove, value);
+            if (coeff == 0)
+              canvas->drawPixel(xMove + i, yMove, ARCADA_BLACK);
+            else
+            {
+              uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
+              uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
+              uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
+              value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
+              canvas->drawPixel(xMove + i, yMove, value);
+            }
           }
         }
         //    Serial.println("");
@@ -86,11 +96,16 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
           //        Serial.printf("%0,", value);
           if (value != 0xF81F)
           {
-            uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
-            uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
-            uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
-            value = rgbTo565(r * coeff, g * coeff, b * coeff);
-            canvas->drawPixel((xMove + width - 1) - i, yMove, value);
+            if (coeff == 0)
+              canvas->drawPixel((xMove + width - 1) - i, yMove, ARCADA_BLACK);
+            else
+            {
+              uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
+              uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
+              uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
+              value = rgbTo565(r * coeff, g * coeff, b * coeff);
+              canvas->drawPixel((xMove + width - 1) - i, yMove, value);
+            }
           }
         }
         //    Serial.println("");
@@ -150,11 +165,16 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
-            uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
-            uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
-            value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
-            canvas->drawPixel(xMove + i, yMove, value);
+            if (coeff == 0)
+              canvas->drawPixel(xMove + i, yMove, ARCADA_BLACK);
+            else
+            {
+              uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
+              uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
+              uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
+              value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
+              canvas->drawPixel(xMove + i, yMove, value);
+            }
           }
         }
       }
@@ -164,11 +184,11 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
   //  Serial.println("");
 }
 
-void drawTile2(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light, int curLight_TL, int curLight_TR, int curLight_BL, int curLight_BR)
+void drawTile2(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int curLight_TL, int curLight_BR, int lightX, int lightY)
 {
   uint16_t idx = 0;
 
-  if (light < 0 || light == MAX_LIGHT_INTENSITY)
+  if (curLight_TL < 0 || curLight_TL == MAX_LIGHT_INTENSITY)
   {
 
     for (int16_t j = 0; j < 16; j++, yMove++)
@@ -187,7 +207,7 @@ void drawTile2(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int li
   }
   else
   {
-    float coeff = (float)light / MAX_LIGHT_INTENSITY;
+    float coeff = (float)curLight_TL / MAX_LIGHT_INTENSITY;
     if (coeff == 0)
     {
       for (int16_t j = 0; j < 16; j++, yMove++)
@@ -205,29 +225,46 @@ void drawTile2(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int li
     }
     else
     {
-      float coeffX = (float)curLight_TL / MAX_LIGHT_INTENSITY;
-      float coeffY = (float)curLight_TL / MAX_LIGHT_INTENSITY;
-      float stepX = ((curLight_TR - curLight_TL) / MAX_LIGHT_INTENSITY) / 16;
-      float stepY = ((curLight_BL - curLight_TL) / MAX_LIGHT_INTENSITY) / 16;
-      coeff = coeffY;
+
+      float stepY = (curLight_BR - curLight_TL) / 16;
+
       for (int16_t j = 0; j < 16; j++, yMove++)
       {
-        coeff = coeffY + (j * stepY);
         for (int16_t i = 0; i < 16; i++)
         {
+          int px = xMove + i;
+          int py = yMove;
+          
+          float curLight = curLight_TL + (stepY * j);
+
+            float distPlayer = sqrt((lightX - px) * (lightX - px) + (lightY - py) * (lightY - py));
+            // @todo gerer la non propagassion de la lumiere dans les murs...
+            if (distPlayer < 64)
+            {
+                curLight = curLight + (PLAYER_LIGHT_INTENSITY / distPlayer);
+            }
+            curLight = min(curLight, MAX_LIGHT_INTENSITY);
+            float coeff = (float)curLight / MAX_LIGHT_INTENSITY;
+
           uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
-            uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
-            uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
-            value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
-            canvas->drawPixel(xMove + i, yMove, value);
+            if (coeff == 0)
+              canvas->drawPixel(px, py, ARCADA_BLACK);
+            else
+            {
+              uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
+              uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
+              uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
+              value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
+              canvas->drawPixel(px, py, value);
+            }
+            
           }
-          coeff += stepX;
         }
-      }
+        
+     }
     }
   }
 

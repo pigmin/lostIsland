@@ -1,6 +1,7 @@
 #ifndef SPRITES_H
 #define SPRITES_H
 
+
    #define PLAYER_STATE_IDLE     0
    #define PLAYER_STATE_WALK     1
    #define PLAYER_STATE_JUMP     2

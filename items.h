@@ -17,7 +17,8 @@
         int y;
         int current_framerate;
         int anim;
-        int direction;
+        int speed_x;
+        int speed_y;
     } Titem;
 
 

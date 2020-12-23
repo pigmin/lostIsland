@@ -50,7 +50,10 @@
 			"stack": "cpp",
 			"unordered_map": "cpp",
 			"*.tpp": "cpp",
-			"__functional_03": "cpp"
+			"__functional_03": "cpp",
+			"*.tcc": "cpp",
+			"fstream": "cpp",
+			"ios": "cpp"
 		}
 	}
 }

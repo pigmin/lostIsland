@@ -9,12 +9,22 @@
 //#include <FastLED.h>
 
 //#define NO_SOUND
-#define FPS (1000 / 25)
-#define WORLD_WIDTH 604
-#define WORLD_HEIGHT 128
+#define FPS int(1000 / 20)
+#define FPS_DIV2 int(FPS / 2)
+#define FPS_DIV4 int(FPS / 4)
+
+// @todo passer en time based et non frame based
+// @todo idem pour les speed et anims frames des sprites...
+#define FRAMES_LOCK_ACTION_B int(300 / FPS)
+#define FRAMES_ANIM_ACTION_B int(500 / FPS)
+#define FRAMES_ACTION_B int(2000 / FPS)
+#define FRAMES_COOLDOWN_B int(1000 / FPS)
+
+#define WORLD_WIDTH 200
+#define WORLD_HEIGHT 96
 
 #define AMPLITUDE_HAUTEUR 16
-#define MEDIUM_HAUTEUR (2 * WORLD_HEIGHT / 3)
+#define MEDIUM_HAUTEUR int(2 * WORLD_HEIGHT / 3)
 
 #define MAX_DENSITE 8
 #define AMPLITUDE_DENSITE 16
@@ -35,7 +45,7 @@
 
 #include "SimplexNoise.h"
 
-#include "musics/bach_tocatta_fugue_d_minor.c"
+//#include "musics/bach_tocatta_fugue_d_minor.c"
 
 #if !defined(USE_TINYUSB)
 #error("Please select TinyUSB for the USB stack!")
@@ -59,12 +69,18 @@
 #include "res/player_action5.c"
 #include "res/player_action6.c"
 
-
 #include "res/player_falling1.c"
 
 #include "res/player_jump1.c"
 #include "res/player_jump2.c"
 #include "res/player_jump3.c"
+
+#include "res/spider_walk1.c"
+#include "res/spider_walk2.c"
+
+#include "res/zombi_walk1.c"
+#include "res/zombi_walk2.c"
+#include "res/zombi_walk3.c"
 
 #include "res/back_ground.c"
 
@@ -97,6 +113,8 @@
 #include "res/pioche.c"
 
 #include "sounds/Jump.h"
+#include "sounds/Pioche.h"
+#include "sounds/RockBreaks.h"
 
 extern Adafruit_SPIFlash Arcada_QSPI_Flash;
 
@@ -107,13 +125,17 @@ int Swidth, Sheight;
 
 typedef enum TGameStates
 {
-    STATE_MENU,
+    STATE_MAIN_MENU,
+    STATE_PAUSE_MENU,
+    STATE_CREATE_CHARACTER,
+    STATE_GAME_MENU,
+    STATE_OPTIONS,
     STATE_PLAYING,
     STATE_CRAFTING,
     STATE_GAMEOVER,
 } TGameStates;
 
-TGameStates gameState = STATE_MENU;
+TGameStates gameState = STATE_MAIN_MENU;
 
 #define BASE_X_PLAYER 7
 #define BASE_Y_PLAYER 1
@@ -130,27 +152,14 @@ TGameStates gameState = STATE_MENU;
 Particles parts;
 
 int briquesFRAMES = 0;
-int RUN_DIR = 1;
 
 int CURRENT_LEVEL = 1;
 
 int CURRENT_LEVEL_ENNEMIES = 0;
 int CURRENT_LEVEL_ITEMS = 0;
-
-int player_pos_x = (BASE_X_PLAYER * 16);
-int player_pos_y = (BASE_Y_PLAYER * 16);
-
-int player_speed_x = 0;
-int player_speed_y = 0;
-
-int new_player_pos_x = 0;
-int new_player_pos_y = 0;
-
-int player_anim = 0;
-int player_current_framerate = 0;
-int playerStateAnim = PLAYER_STATE_IDLE;
-
-int cibleX, cibleY = 0;
+int CURRENT_LEVEL_ZOMBIES = 0;
+int CURRENT_LEVEL_SPIDERS = 0;
+int CURRENT_LEVEL_SKELS = 0;
 
 int worldX = 0;
 int worldMIN_X = 0;
@@ -162,7 +171,13 @@ int worldMIN_Y = 0;
 int worldMAX_Y = 0;
 int currentOffset_Y = 0;
 
+int worldOffset_pX = 0;
+int worldOffset_pY = 0;
+
 int counterActionB = 0;
+int coolDownActionB = 0;
+
+TPlayer Player;
 
 unsigned char WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
 #define HEADER_ROW WORLD_HEIGHT
@@ -171,7 +186,11 @@ unsigned char WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
 #define BACKWORLD_WIDTH (WORLD_WIDTH / 4) + (ARCADA_TFT_WIDTH / 8)
 #define BACKWORLD_HEIGHT 16
 
-unsigned char WORLD_BACK[BACKWORLD_HEIGHT][BACKWORLD_WIDTH];
+//unsigned char WORLD_BACK[BACKWORLD_HEIGHT][BACKWORLD_WIDTH];
+
+unsigned char WORLD_INFOS[WORLD_HEIGHT + 2][WORLD_WIDTH];
+
+unsigned char SCREEN_WORLD_OVERLAY[(ARCADA_TFT_WIDTH + 1) / 16][(ARCADA_TFT_HEIGHT + 1) / 16];
 
 AsyncDelay tick;
 
@@ -183,13 +202,16 @@ void drawHud();
 
 void killEnnemy(Tennemy *currentEnnemy, int px, int py);
 void drawEnnemy(Tennemy *currentEnnemy);
+void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy);
+void updateEnnemiesIA();
+
 void drawEnnemies();
 void drawTiles();
 void drawParticles();
 void drawWorld();
 void pixelToWorld(int *pX, int *pY);
 int checkCollisionAt(int newX, int newY);
-int checkCollisionTo(int x, int y, int newX, int newY);
+uint8_t checkCollisionTo(int x, int y, int newX, int newY);
 void checkPlayerState();
 void updatePlayer();
 void updateEnnemies();
@@ -206,37 +228,17 @@ void anim_player_idle();
 void anim_player_walk();
 void anim_player_falling();
 void anim_player_mining();
+void anim_player_digging();
 
 uint8_t pressed_buttons = 0;
 uint8_t just_pressed = 0;
 int SCORE = 0;
 bool bWin = false;
-bool bDying = false;
-bool bJumping = false;
-bool bFalling = false;
-bool bWalking = false;
-bool bMoving = false;
-bool bTouched = false;
-
-int iTouchCountDown = 0;
-
-bool bOnGround = true;
 
 int cameraX = 0;
 int cameraY = 0;
 
-int posXPlayerInWorld = 0;
-int posYPlayerInWorld = 0;
-
-int posXPlayerInWorld_TL = 0;
-int posYPlayerInWorld_TL = 0;
-int posXPlayerInWorld_BR = 0;
-int posYPlayerInWorld_BR = 0;
 int currentX_back = 0;
-
-int posXFront = 0;
-int posYDown = 0;
-int posYUp = 0;
 
 int jumpPhase = 0;
 unsigned char brique_UP = 0;
@@ -251,7 +253,6 @@ int count_player_win = 0;
 
 bool bDoJump = false;
 bool bDoWalk = false;
-bool bWatch = true;
 
 unsigned long prevDisplay = 0; // when the digital clock was displayed
 
@@ -310,20 +311,6 @@ void spawnMushroom(int wX, int wY)
     createItem(wX, wY, ITEM_MUSHROOM);
 }
 
-static void handleChangeState()
-{
-    //Serial.println("handleChangeState");
-    if (bWatch)
-    {
-
-        bWatch = false;
-    }
-    else
-    {
-        bWatch = true;
-    }
-}
-
 void displayText(char *text, int16_t x, int16_t y, uint16_t color = ARCADA_WHITE, bool bCenter = false)
 {
     canvas->setTextWrap(false);
@@ -375,12 +362,20 @@ void setup()
 
     framebuffer = arcada.getFrameBuffer();
     canvas = arcada.getCanvas();
-    /*
-  if (!arcada.filesysBeginMSD(ARCADA_FILESYS_QSPI))
-  {
-    arcada.haltBox("Failed to begin fileSys");
-  }*/
-    arcada.infoBox("PRESS START", ARCADA_BUTTONMASK_START);
+
+    if (!arcada.filesysBeginMSD(ARCADA_FILESYS_QSPI))
+    {
+        Serial.println("Error, failed to initialize filesysBeginMSD!");
+        arcada.haltBox("Failed to begin filesysBeginMSD");
+    }
+
+    Arcada_FilesystemType foundFS = arcada.filesysBegin();
+    if (foundFS == ARCADA_FILESYS_NONE)
+    {
+        Serial.println("Error, failed to initialize filesys!");
+        arcada.haltBox("Failed to begin fileSys");
+    }
+    arcada.mkdir("/saves");
 
     setupSoundManager();
     /********** Start speaker */
@@ -394,9 +389,9 @@ void setup()
     arcada.display->setTextWrap(true);
     arcada.display->setTextSize(1);
 
-    arcada.display->setTextColor(ARCADA_GREEN);
+    arcada.display->setTextColor(ARCADA_WHITE);
 
-    initGame();
+    initMenu();
 
     tick.start(FPS, AsyncDelay::MILLIS);
 
@@ -408,65 +403,80 @@ void clearRect(int16_t xMove, int16_t yMove, int16_t width, int16_t height)
     canvas->fillRect(xMove, yMove, width, height, 0x867D);
 }
 
+void initPlayer()
+{
+    memset(&Player, 0, sizeof(Player));
+    Player.pos.pX = BASE_X_PLAYER * 16;
+    Player.pos.pY = BASE_Y_PLAYER * 16;
+    Player.pos.direction = 1;
+
+    Player.pos.XFront = 0;
+    Player.pos.YDown = 0;
+    Player.pos.YUp = 0;
+    Player.pos.worldX = 0;
+    Player.pos.worldY = 0;
+
+    Player.anim = 0;
+    Player.current_framerate = 0;
+    Player.stateAnim = PLAYER_STATE_IDLE;
+
+    Player.cible_wX = Player.cible_wY = 0;
+    Player.cible_pX, Player.cible_pY = 0;
+    /*
+  unsigned char state;  
+  unsigned char action, action_cooldown, action_perf;
+  unsigned char depth;
+  unsigned char health;
+  unsigned char level;
+  unsigned char stars_kills;
+  unsigned short armour_weapon;
+*/
+
+    Player.bDying = false;
+    Player.bJumping = false;
+    Player.bFalling = false;
+    Player.bWalking = false;
+    Player.bMoving = false;
+    Player.bTouched = false;
+    Player.iTouchCountDown = 0;
+
+    Player.bOnGround = true;
+}
+
 void initGame()
 {
+    arcada.pixels.fill(0x00FF00);
+    //    arcada.pixels.setPixelColor(4, 0x00FF00);
+    arcada.pixels.show();
     //arcada.display->setFont(ArialMT_Plain_10);
     //  arcada.display->setTextAlignment(TEXT_ALIGN_LEFT);
     briquesFRAMES = 0;
 
-    RUN_DIR = 1;
     SCORE = 0;
     pressed_buttons = 0;
     bWin = false;
-    bDying = false;
-    bJumping = false;
-    bFalling = false;
-    bWalking = false;
-    bMoving = false;
-    bTouched = false;
-    iTouchCountDown = 0;
 
-    bOnGround = true;
-
-    cameraX = BASE_X_PLAYER * 16;
-    cameraY = BASE_Y_PLAYER * 16;
-    posXPlayerInWorld_TL = posXPlayerInWorld_BR = posXPlayerInWorld = 0;
-    posXFront = 0;
-    posYDown = 0;
-    posYUp = 0;
-    posYPlayerInWorld_TL = posYPlayerInWorld_BR = posYPlayerInWorld = 0;
     currentX_back = 0;
-    worldX = 0;
-    worldMIN_X = 0;
-    worldMAX_X = 0;
-    currentOffset_X = 0;
 
-    worldY = 0;
-    worldMIN_Y = 0;
-    worldMAX_Y = 0;
-    currentOffset_Y = 0;
+    calculatePlayerCoords();
+
+    counterActionB = 0;
+    coolDownActionB = 0;
 
     jumpPhase = 0;
-    brique_UP = 0;
-    brique_DOWN = 0;
-    brique_DOWN_FRONT = 0;
-    brique_FRONT = 0;
-    brique_PLAYER = 0;
 
     bDoJump = false;
     bDoWalk = false;
 
-    player_pos_x = (BASE_X_PLAYER * 16);
-    player_pos_y = (BASE_Y_PLAYER * 16);
-    player_speed_x = 0;
-    player_speed_y = 0;
-    new_player_pos_x = 0;
-    new_player_pos_y = 0;
-    cibleX, cibleY = 0;
+    Player.pos.speedX = 0;
+    Player.pos.speedY = 0;
+    Player.pos.newX = 0;
+    Player.pos.newY = 0;
+    Player.cible_wX, Player.cible_wY = 0;
 
-    player_anim = 0;
-    player_current_framerate = 0;
-    playerStateAnim = PLAYER_STATE_IDLE;
+    Player.anim = 0;
+    Player.current_framerate = 0;
+    Player.stateAnim = PLAYER_STATE_IDLE;
 
     count_player_die = 0;
     count_player_win = 0;
@@ -477,75 +487,73 @@ void initGame()
 
 void set_falling()
 {
-    if (playerStateAnim != PLAYER_STATE_FALL)
+    if (Player.stateAnim != PLAYER_STATE_FALL)
     {
-        playerStateAnim = PLAYER_STATE_FALL;
-        player_anim = PLAYER_FRAME_FALLING_1;
-        player_current_framerate = 0;
+        Player.stateAnim = PLAYER_STATE_FALL;
+        Player.anim = PLAYER_FRAME_FALLING_1;
+        Player.current_framerate = 0;
     }
 }
 
 void set_idle()
 {
-    if (playerStateAnim != PLAYER_STATE_IDLE)
+    if (Player.stateAnim != PLAYER_STATE_IDLE)
     {
-        playerStateAnim = PLAYER_STATE_IDLE;
-        player_anim = PLAYER_FRAME_IDLE_1;
-        player_current_framerate = 0;
+        Player.stateAnim = PLAYER_STATE_IDLE;
+        Player.anim = PLAYER_FRAME_IDLE_1;
+        Player.current_framerate = 0;
     }
 }
 
 void set_jumping()
 {
-    if (playerStateAnim != PLAYER_STATE_JUMP)
+    if (Player.stateAnim != PLAYER_STATE_JUMP)
     {
-        playerStateAnim = PLAYER_STATE_JUMP;
+        Player.stateAnim = PLAYER_STATE_JUMP;
 
-        player_anim = PLAYER_FRAME_JUMP_1;
-        player_current_framerate = 0;
+        Player.anim = PLAYER_FRAME_JUMP_1;
+        Player.current_framerate = 0;
     }
 }
 
 void set_walking()
 {
-    if (playerStateAnim != PLAYER_STATE_WALK)
+    if (Player.stateAnim != PLAYER_STATE_WALK)
     {
-        playerStateAnim = PLAYER_STATE_WALK;
+        Player.stateAnim = PLAYER_STATE_WALK;
 
-        player_anim = PLAYER_FRAME_WALK_1;
-        player_current_framerate = 0;
+        Player.anim = PLAYER_FRAME_WALK_1;
+        Player.current_framerate = 0;
     }
 }
-
 
 void set_digging()
 {
-    if (playerStateAnim != PLAYER_STATE_DIG)
+    if (Player.stateAnim != PLAYER_STATE_DIG)
     {
-        playerStateAnim = PLAYER_STATE_DIG;
+        Player.stateAnim = PLAYER_STATE_DIG;
 
-        player_anim = PLAYER_FRAME_ACTION_1;
-        player_current_framerate = 0;
+        Player.anim = PLAYER_FRAME_ACTION_1;
+        Player.current_framerate = 0;
     }
 }
 
-
 void set_dying()
 {
-    if (playerStateAnim != PLAYER_STATE_DIE)
+    if (Player.stateAnim != PLAYER_STATE_DIE)
     {
-        playerStateAnim = PLAYER_STATE_DIE;
+        Player.stateAnim = PLAYER_STATE_DIE;
 
         stopMusic();
         //    sndPlayerCanal1.play(AudioSamplePlayerdeath);
-        bDying = true;
-        iTouchCountDown = 0;
-        bTouched = false;
-        bWalking = true;
+        Player.bDying = true;
+        Player.iTouchCountDown = 0;
+        Player.bTouched = false;
+        Player.bWalking = true;
         jumpPhase = 0;
         count_player_die = 0;
-        player_anim = PLAYER_FRAME_DIE_1;
-        player_current_framerate = 0;
+        Player.anim = PLAYER_FRAME_DIE_1;
+        Player.current_framerate = 0;
     }
 }
 
@@ -554,14 +562,14 @@ void set_touched()
     /*    if (bPlayerGrand)
     {
         //    sndPlayerCanal3.play(AudioSampleSmb_pipe);
-        bTouched = true;
-        iTouchCountDown = 2 * FPS;
+        Player.bTouched = true;
+        Player.iTouchCountDown = 2 * FPS;
         count_player_touched = 0;
-        //player_anim = PLAYER_FRAME_TOUCH_1;
-        //player_current_framerate = 0;
+        //Player.anim = PLAYER_FRAME_TOUCH_1;
+        //Player.current_framerate = 0;
         bPlayerGrand = false;
     }
-    else if (iTouchCountDown == 0)*/
+    else if (Player.iTouchCountDown == 0)*/
     {
         set_dying();
     }
@@ -569,27 +577,24 @@ void set_touched()
 
 void set_wining()
 {
-    Serial.println("Winning");
-    if (playerStateAnim != PLAYER_STATE_WIN)
+    if (Player.stateAnim != PLAYER_STATE_WIN)
     {
-        playerStateAnim = PLAYER_STATE_WIN;
+        Player.stateAnim = PLAYER_STATE_WIN;
 
         //playMusic(FlagpoleFanfare);
-        iTouchCountDown = 0;
-        bTouched = false;
+        Player.iTouchCountDown = 0;
+        Player.bTouched = false;
         bWin = true;
         jumpPhase = 0;
         count_player_win = 0;
-        player_anim = PLAYER_FRAME_WIN_1;
-        player_current_framerate = 0;
+        Player.anim = PLAYER_FRAME_WIN_1;
+        Player.current_framerate = 0;
     }
 }
 
 void initWorld()
 {
     stopMusic();
-    //On remplace les espaces par 0
-    CURRENT_LEVEL_ENNEMIES = 0;
 
     //uint8_t zeNoise[WORLD_WIDTH];
     SimplexNoise noiseGen;
@@ -641,7 +646,7 @@ void initWorld()
                 if (densite > MAX_DENSITE)
                     WORLD[wY][wX] = BLOCK_AIR;
             }
-            else 
+            else
             {
                 if (abs(densite) > MAX_DENSITE || densite == 0)
                     WORLD[wY][wX] = BLOCK_UNDERGROUND_AIR;
@@ -665,17 +670,116 @@ void initWorld()
                 WORLD[REF_ROW][wX] = wY;
 
                 WORLD[wY][wX] = BLOCK_GROUND_TOP;
-                if (wY+1 < (WORLD_HEIGHT-1))
-                    WORLD[wY+1][wX] = BLOCK_GROUND;
-                
+                if (wY + 1 < (WORLD_HEIGHT - 1))
+                    WORLD[wY + 1][wX] = BLOCK_GROUND;
+
                 break;
             }
         }
     }
- 
+
+    CURRENT_LEVEL_ENNEMIES = 0;
+    for (int wX = 1; wX < WORLD_WIDTH - 1; wX += 3)
+    {
+        for (int wY = 1; wY < WORLD_HEIGHT - 1; wY++)
+        {
+            if (CURRENT_LEVEL_ENNEMIES < MAX_ENNEMIES)
+            {
+                int haut = WORLD[HEADER_ROW][wX];
+                int seed = random(100);
+                if (seed < 10 && CURRENT_LEVEL_SKELS < MAX_SKELS)
+                {
+                    if (WORLD[HEADER_ROW][wX] == 0)
+                    {
+                        /*
+                        //Zombi
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bIsAlive = 255;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX = wX;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY = haut;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].x = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX * 16;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].y = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY * 16;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_x = 0;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_y = 0;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].type = SKEL_ENNEMY;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_x = SKEL_WALKING_SPEED;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_y = 0;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_frames = 4;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_anim = 3;
+
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bFalling = false;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bJumping = false;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bOnGround = false;
+*/
+                        CURRENT_LEVEL_SKELS++;
+                        //CURRENT_LEVEL_ENNEMIES++;
+                    }
+                }
+                else if (seed < 33 && CURRENT_LEVEL_ZOMBIES < MAX_ZOMBIES)
+                {
+                    if (WORLD[wY][wX] == 0)
+                    {
+
+                        //Zombi
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bIsAlive = 255;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX = wX;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY = haut;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].x = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX * 16;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].y = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY * 16;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_x = 0;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_y = 0;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].type = ZOMBI_ENNEMY;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_x = ZOMBI_WALKING_SPEED;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_y = 0;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_frames = 4;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_anim = 3;
+
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bFalling = false;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bJumping = false;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bOnGround = false;
+
+                        CURRENT_LEVEL_ENNEMIES++;
+                        CURRENT_LEVEL_ZOMBIES++;
+                    }
+                }
+                else if (seed <= 50)
+                {
+                    if (WORLD[wY][wX] == 0x7f && WORLD[wY][wX + 1] == 0x7f && WORLD[wY][wX - 1] == 0x7f && WORLD[wY - 1][wX] == 0x7f)
+                    {
+                        //Spiders
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bIsAlive = 255;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX = wX;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY = wY;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].x = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX * 16;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].y = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY * 16;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_x = 0;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_y = 0;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].type = SPIDER_ENNEMY;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_x = SPIDER_WALKING_SPEED;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_y = 0;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_frames = 2;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_anim = 2;
+
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bFalling = false;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bJumping = false;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bOnGround = false;
+
+                        CURRENT_LEVEL_ENNEMIES++;
+                        CURRENT_LEVEL_SPIDERS++;
+                    }
+                }
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+
+    Serial.printf("CURRENT_LEVEL_ENNEMIES:%d\n", CURRENT_LEVEL_ENNEMIES);
     Serial.printf("Min:%f / Max:%f\n", minN, maxN);
 
     CURRENT_LEVEL_ITEMS = 0;
+#ifdef USE_WORLD_BACK
 
     memset(&WORLD_BACK, 0, BACKWORLD_HEIGHT * BACKWORLD_WIDTH);
 
@@ -747,21 +851,22 @@ void initWorld()
         }
         montI += (4 + random(6));
     }
+#endif
 
- //   playMusic(bach_tocatta_fugue_d_minor);
+    //   playMusic(bach_tocatta_fugue_d_minor);
 }
 
 void drawPlayer()
 {
-    if (iTouchCountDown > 0)
+    if (Player.iTouchCountDown > 0)
     {
-        iTouchCountDown--;
+        Player.iTouchCountDown--;
 
-        if ((iTouchCountDown % 2) == 0)
+        if ((Player.iTouchCountDown % 2) == 0)
             return;
     }
 
-    switch (playerStateAnim)
+    switch (Player.stateAnim)
     {
     case PLAYER_STATE_WALK:
         anim_player_walk();
@@ -773,7 +878,7 @@ void drawPlayer()
         anim_player_falling();
         break;
     case PLAYER_STATE_DIG:
-        anim_player_diging();
+        anim_player_digging();
         break;
     case PLAYER_STATE_WIN:
     {
@@ -827,7 +932,8 @@ void createItem(int wX, int wY, int type)
         ITEMS[CURRENT_LEVEL_ITEMS].x = wX * 16;
         ITEMS[CURRENT_LEVEL_ITEMS].y = wY * 16;
         ITEMS[CURRENT_LEVEL_ITEMS].type = type;
-        ITEMS[CURRENT_LEVEL_ITEMS].direction = 1;
+        ITEMS[CURRENT_LEVEL_ITEMS].speed_x = 0;
+        ITEMS[CURRENT_LEVEL_ITEMS].speed_y = 0;
         ITEMS[CURRENT_LEVEL_ITEMS].max_frames = 2;
         ITEMS[CURRENT_LEVEL_ITEMS].max_anim = 2;
 
@@ -842,9 +948,8 @@ void createItem(int wX, int wY, int type)
 void killItem(Titem *currentItem, int px, int py)
 {
     currentItem->bIsAlive = 64;
-    px = (px - (worldMIN_X * 16)) - currentOffset_X;
 
-    //parts.createExplosion(px, py, 16);
+    //parts.createExplosion(px - cameraX, py - cameraY, 16);
 }
 
 void drawItem(Titem *currentItem)
@@ -866,31 +971,29 @@ void drawItem(Titem *currentItem)
         currentItem->bIsAlive -= 4;
     }
 
-    int px = (currentItem->x - (worldMIN_X * 16)) - currentOffset_X;
+    int px = currentItem->x - worldOffset_pX;
+    int py = currentItem->y - worldOffset_pY;
     //Recentrage
     //px -= 4;
-    if ((px < (ARCADA_TFT_WIDTH - 1)) && (px > -16))
+    if (px < ARCADA_TFT_WIDTH && px > -16 && py < ARCADA_TFT_HEIGHT && py > -16)
     {
         /*    if (currentItem->iSpawning > 0)
     {
       int tmpH = 16 - (currentItem->iSpawning / 2);
-      drawSprite(px, (currentItem->y - 16) + (16 - tmpH), mushroom_16x16.width, tmpH, mushroom_16x16.pixel_data, RUN_DIR);
+      drawSprite(px, (currentItem->y ) + (16 - tmpH), mushroom_16x16.width, tmpH, mushroom_16x16.pixel_data, Player.pos.direction);
     }
     else
-      drawSprite(px, currentItem->y - 16, mushroom_16x16.width, mushroom_16x16.height, mushroom_16x16.pixel_data, RUN_DIR);*/
+      drawSprite(px, currentItem->y, mushroom_16x16.width, mushroom_16x16.height, mushroom_16x16.pixel_data, Player.pos.direction);*/
     }
 }
 
 void drawItems()
 {
-    int currentOffset_X = cameraX % 16;
-
     for (int enC = 0; enC < CURRENT_LEVEL_ITEMS; enC++)
     {
         Titem *currentItem = &ITEMS[enC];
         if (currentItem->bIsAlive > 0)
         {
-            //Serial.printf("World:%d,%d\n", worldMIN_X, worldMAX_X);
             if (((currentItem->worldX >= (worldMIN_X - 1)) && (currentItem->worldX <= (worldMAX_X + 1))) &&
                 ((currentItem->worldY >= (worldMIN_Y - 1)) && (currentItem->worldY <= (worldMAX_Y + 1))))
             {
@@ -903,7 +1006,9 @@ void drawItems()
 void killEnnemy(Tennemy *currentEnnemy, int px, int py)
 {
     currentEnnemy->bIsAlive = 64;
-    px = (px - (worldMIN_X * 16)) - currentOffset_X;
+
+    px -= worldOffset_pX;
+    py -= worldOffset_pY;
 
     parts.createExplosion(px, py, 16);
 }
@@ -924,43 +1029,58 @@ void drawEnnemy(Tennemy *currentEnnemy)
     }
     if (currentEnnemy->bIsAlive < 127)
     {
-        currentEnnemy->anim = 3;
+        currentEnnemy->anim = currentEnnemy->max_anim + 1;
         currentEnnemy->bIsAlive -= 4;
     }
 
-    int px = (currentEnnemy->x - (worldMIN_X * 16)) - currentOffset_X;
+    int px = currentEnnemy->x - worldOffset_pX;
+    int py = currentEnnemy->y - worldOffset_pY;
     //Recentrage
     //px -= 4;
-
-    if ((px < (ARCADA_TFT_WIDTH - 1)) && (px > -16))
-    { /*
-    switch (currentEnnemy->anim)
+    if (px < ARCADA_TFT_WIDTH && px > -16 && py < ARCADA_TFT_HEIGHT && py > -16)
     {
-    case 1:
-      drawSprite(px, currentEnnemy->y - 16, koopa1_16x16.width, koopa1_16x16.height, koopa1_16x16.pixel_data, RUN_DIR);
-      //      drawSprite(px, currentEnnemy->y, 16, 16, koopa1_bits, 1);
-      break;
-    case 2:
-      drawSprite(px, currentEnnemy->y - 16, koopa2_16x16.width, koopa2_16x16.height, koopa2_16x16.pixel_data, RUN_DIR);
-      //drawSprite(px, currentEnnemy->y, 16, 16, koopa1_bits, 1);
-      break;
-    default:
-      drawSprite(px, currentEnnemy->y - 16, koopa_die_16x16.width, koopa_die_16x16.height, koopa_die_16x16.pixel_data, RUN_DIR);
-      break;
-    }*/
+        switch (currentEnnemy->type)
+        {
+        case SPIDER_ENNEMY:
+            switch (currentEnnemy->anim)
+            {
+            case 1:
+                drawSprite(px, py, spider_walk1.width, spider_walk1.height, spider_walk1.pixel_data, 1);
+                break;
+            case 2:
+                drawSprite(px, py, spider_walk2.width, spider_walk2.height, spider_walk2.pixel_data, 1);
+                break;
+            }
+            break;
+
+        case ZOMBI_ENNEMY:
+        {
+            int DIR = currentEnnemy->speed_x > 0 ? 1 : -1;
+            switch (currentEnnemy->anim)
+            {
+            case 1:
+                drawSprite(px, py, zombi_walk1.width, zombi_walk1.height, zombi_walk1.pixel_data, DIR);
+                break;
+            case 2:
+                drawSprite(px, py, zombi_walk2.width, zombi_walk2.height, zombi_walk2.pixel_data, DIR);
+                break;
+            case 3:
+                drawSprite(px, py, zombi_walk3.width, zombi_walk3.height, zombi_walk3.pixel_data, DIR);
+                break;
+            }
+            break;
+        }
+        }
     }
 }
 
 void drawEnnemies()
 {
-    int currentOffset_X = cameraX % 16;
-
     for (int enC = 0; enC < CURRENT_LEVEL_ENNEMIES; enC++)
     {
         Tennemy *currentEnnemy = &ENNEMIES[enC];
         if (currentEnnemy->bIsAlive > 0)
         {
-            //Serial.printf("World:%d,%d\n", worldMIN_X, worldMAX_X);
             if (((currentEnnemy->worldX >= (worldMIN_X - 1)) && (currentEnnemy->worldX <= (worldMAX_X + 1))) &&
                 ((currentEnnemy->worldY >= (worldMIN_Y - 1)) && (currentEnnemy->worldY <= (worldMAX_Y + 1))))
             {
@@ -978,17 +1098,15 @@ void drawTiles()
     int worldMIN_BACK = min(worldX_BACK, (BACKWORLD_WIDTH - 1) - (ARCADA_TFT_WIDTH / 8));
     int worldMAX_BACK = worldMIN_BACK + 1 + (ARCADA_TFT_WIDTH / 8);
 #ifdef PIXEL_LIGHT
-    int playerLightX = player_pos_x + 8;
-    int playerLightY = player_pos_y + 8;
+    int playerLightX = (Player.pos.pX + 8) - cameraX;
+    int playerLightY = (Player.pos.pY + 8) - cameraY;
 #else
-//    int playerLightX = posXPlayerInWorld;
-//    int playerLightY = posYPlayerInWorld;
-    int playerLightX = player_pos_x + 8;
-    int playerLightY = player_pos_y + 8;
+    int playerLightX = Player.pos.worldX;
+    int playerLightY = Player.pos.worldY;
+//    int playerLightX = (Player.pos.pX + 8) - cameraX;
+//    int playerLightY = (Player.pos.pY + 8) - cameraY;
 #endif
-    //Serial.printf("worldMIN_X:%d\n", worldMIN_X);
-    //Serial.printf("worldMIN_BACK:%d\n", worldMIN_BACK);
-    for (int wY = 0; wY < BACKWORLD_HEIGHT; wY++)
+    /*    for (int wY = 0; wY < BACKWORLD_HEIGHT; wY++)
     {
         int py = wY * 8;
         if (py < -8)
@@ -1029,89 +1147,67 @@ void drawTiles()
             }
         }
     }
-
+*/
     for (int wX = worldMIN_X; wX < worldMAX_X; wX++)
     {
-#ifdef PIXEL_LIGHT
-        int curLight_TL = MAX_LIGHT_INTENSITY;
-        int curLight_TR = MAX_LIGHT_INTENSITY;
-        int curLight_BL = MAX_LIGHT_INTENSITY;
-        int curLight_BR = MAX_LIGHT_INTENSITY;
-#endif
         int profondeurColonne = WORLD[HEADER_ROW][wX];
 
         int px = ((wX - worldMIN_X) * 16) - currentOffset_X;
         if ((px < ARCADA_TFT_WIDTH) && (px > -16))
         {
-            //GERER LA LUM DANS LE CREATEWORLD ET LORS DES UPDATES (ajout ou suppr de briques) + la torche du player en realtime1
-            //On pourra donc remettre worldMIN_Y ici plutot que 0
-
             for (int wY = worldMIN_Y; wY < worldMAX_Y; wY++)
             {
-                int curLight = MAX_LIGHT_INTENSITY;
-                uint8_t value = WORLD[wY][wX];
-
                 int py = ((wY - worldMIN_Y) * 16) - currentOffset_Y;
                 if ((py < ARCADA_TFT_HEIGHT) && (py > -16))
-                {                    
+                {
+                    uint8_t value = WORLD[wY][wX];
+
+                    int curLight = MAX_LIGHT_INTENSITY;
 #ifdef PIXEL_LIGHT
-                    float distPlayer = sqrt( ((playerLightX - (px+8)) * (playerLightX - (px+8))) + ((playerLightY - (py+8)) * (playerLightY - (py+8)) ));
-                    float distPlayer_TL = sqrt( ((playerLightX - (px)) * (playerLightX - (px))) + ((playerLightY - (py)) * (playerLightY - (py)) ));
-                    float distPlayer_TR = sqrt( ((playerLightX - (px+16)) * (playerLightX - (px+16))) + ((playerLightY - (py)) * (playerLightY - (py)) ));
-                    float distPlayer_BL = sqrt( ((playerLightX - (px)) * (playerLightX - (px))) + ((playerLightY - (py+16)) * (playerLightY - (py+16)) ));
-                    float distPlayer_BR = sqrt( ((playerLightX - (px+16)) * (playerLightX - (px+16))) + ((playerLightY - (py+16)) * (playerLightY - (py+16)) ));
+                    int curLight_TL = MAX_LIGHT_INTENSITY;
+                    int curLight_BR = MAX_LIGHT_INTENSITY;
                     if (profondeurColonne != 0)
                     {
-                        int delta = (wY - profondeurColonne)+1;
+                        int delta = (wY - profondeurColonne) + 1;
                         if (delta > 0)
                         {
-                            curLight = curLight / delta;
                             curLight_TL = curLight_TL / delta;
-                            curLight_TR = curLight_TR / delta;
                         }
 
-                        int delta2 = ((wY+1) - profondeurColonne) +1;
+                        int delta2 = ((wY + 1) - profondeurColonne) + 1;
                         if (delta2 > 0)
                         {
-                            curLight_BL = curLight_BL / delta2;
-                            curLight_BR = curLight_BL / delta2;
+                            curLight_BR = curLight_BR / delta2;
                         }
                     }
-                    if (distPlayer < 25*16)
-                    {
-                        curLight = curLight + (PLAYER_LIGHT_INTENSITY / sqrt(distPlayer));
-                        curLight_TL = curLight_TL + (PLAYER_LIGHT_INTENSITY / sqrt(distPlayer_TL));
-                        curLight_TR = curLight_TR + (PLAYER_LIGHT_INTENSITY / sqrt(distPlayer_TR));
-                        curLight_BL = curLight_BL + (PLAYER_LIGHT_INTENSITY / sqrt(distPlayer_BL));
-                        curLight_BR = curLight_BR + (PLAYER_LIGHT_INTENSITY / sqrt(distPlayer_BR));
-                    }
-                    curLight = curLight + AMBIENT_LIGHT_INTENSITY;
                     curLight_TL = curLight_TL + AMBIENT_LIGHT_INTENSITY;
-                    curLight_TR = curLight_TR + AMBIENT_LIGHT_INTENSITY;
-                    curLight_BL = curLight_BL + AMBIENT_LIGHT_INTENSITY;
                     curLight_BR = curLight_BR + AMBIENT_LIGHT_INTENSITY;
-                    curLight = min(curLight, MAX_LIGHT_INTENSITY);
+                    curLight_TL = min(curLight_TL, MAX_LIGHT_INTENSITY);
+                    curLight_BR = min(curLight_BR, MAX_LIGHT_INTENSITY);
 #else
                     if (profondeurColonne != 0)
                     {
-                        int delta = (wY - profondeurColonne)+1;
+                        int delta = (wY - profondeurColonne) + 1;
                         if (delta > 0)
                             curLight = curLight / delta;
                     }
-                    if (wY <= (playerLightY+1) || value == 0 || value == 0x7F) 
+                    // @todo : creer un masque de X*X autour du player pour "ajouter de la light"
+                    if (wY <= (playerLightY + 1) || value == 0 || value == 0x7F)
                     {
-                        float distPlayer = sqrt((playerLightX - px) * (playerLightX - px) + (playerLightY - py) * (playerLightY - py));
+                        //Ray cast du player vers decor ?
+                        float distPlayer = sqrt((playerLightX - wX) * (playerLightX - wX) + (playerLightY - wY) * (playerLightY - wY));
+                        //Serial.printf("player:%d,%d tile:%d,%d dist:%f\n", playerLightX, playerLightY, px, py,  distPlayer);
                         // @todo gerer la non propagassion de la lumiere dans les murs...
-                        if (distPlayer < 64)
+                        if (distPlayer < 4)
                         {
                             curLight = curLight + (PLAYER_LIGHT_INTENSITY / distPlayer);
                         }
                     }
-                    curLight = curLight + AMBIENT_LIGHT_INTENSITY;
+                    //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
                     curLight = min(curLight, MAX_LIGHT_INTENSITY);
 #endif
 #ifdef DEBUG
-    curLight = MAX_LIGHT_INTENSITY;
+                    curLight = MAX_LIGHT_INTENSITY;
 #endif
 
 #ifdef PIXEL_LIGHT
@@ -1122,58 +1218,58 @@ void drawTiles()
                     else if (value == BLOCK_UNDERGROUND_AIR)
                     {
                         //background de terrassement
-                        drawTile2(px, py, back_ground.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, back_ground.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                         // fond du sous terrain : drawSprite(px, py, ground_top.width, ground_top.height, ground_top.pixel_data, 1, curLight);
                     }
                     else if (value == BLOCK_GROUND_TOP) //
                     {
-                        drawTile2(px, py, ground_top.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, ground_top.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
                     else if (value == BLOCK_GROUND) //
                     {
-                        drawTile2(px, py, ground.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, ground.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
                     else if (value == BLOCK_GROUND_ROCK) //
                     {
-                        drawTile2(px, py, rock_empty.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
-                    }                    
+                        drawTile2(px, py, rock_empty.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
+                    }
                     else if (value == BLOCK_ROCK) //
                     {
-                        drawTile2(px, py, rock_empty.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, rock_empty.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
                     else if (value == BLOCK_CHARBON) //
                     {
-                        drawTile2(px, py, rock_charbon.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, rock_charbon.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
                     else if (value == BLOCK_CUIVRE) //
                     {
-                        drawTile2(px, py, rock_cuivre.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, rock_cuivre.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
                     else if (value == BLOCK_FER) //
                     {
-                        drawTile2(px, py, rock_fer.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, rock_fer.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
                     else if (value == BLOCK_ARGENT) //
                     {
-                        drawTile2(px, py, rock_argent.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, rock_argent.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
                     else if (value == BLOCK_JADE) //
                     {
-                        drawTile2(px, py, rock_jade.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, rock_jade.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
                     else if (value == BLOCK_OR) //
                     {
-                        drawTile2(px, py, rock_or.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, rock_or.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
                     else if (value == BLOCK_REDSTONE) //
                     {
-                        drawTile2(px, py, rock_redstone.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
+                        drawTile2(px, py, rock_redstone.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
                     }
-                   
+
                     else
                     {
-                        drawTile2(px, py, rock_empty.pixel_data, curLight, curLight_TL, curLight_TR, curLight_BL, curLight_BR);
-                    }                    
+                        drawTile2(px, py, rock_empty.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
+                    }
 #else
                     if (value == 0)
                     {
@@ -1196,7 +1292,7 @@ void drawTiles()
                     else if (value == BLOCK_GROUND_ROCK) //
                     {
                         drawTile(px, py, rock_empty.pixel_data, curLight);
-                    }                    
+                    }
                     else if (value == BLOCK_ROCK) //
                     {
                         drawTile(px, py, rock_empty.pixel_data, curLight);
@@ -1254,7 +1350,7 @@ void drawTiles()
                     else
                     {
                         drawTile(px, py, rock_empty.pixel_data, curLight);
-/*                        int R = (75 + value) * (curLight / MAX_LIGHT_INTENSITY);
+                        /*                        int R = (75 + value) * (curLight / MAX_LIGHT_INTENSITY);
                         int G = (72 + value) * (curLight / MAX_LIGHT_INTENSITY);
                         int B = (59 + value) * (curLight / MAX_LIGHT_INTENSITY);
                         canvas->fillRect(px, py, 16, 16, rgbTo565(R, G, B));*/
@@ -1331,46 +1427,46 @@ void debugInfos()
     static int lastX = 0;
     static int lastY = 0;
 
-    if ((lastX != posXPlayerInWorld) || (lastY != posYPlayerInWorld))
+    if ((lastX != Player.pos.worldX) || (lastY != Player.pos.worldY))
     {
-        Serial.printf("WPos1:%d,%d\n", posXPlayerInWorld, posYPlayerInWorld);
-        Serial.printf("Pix:%d,%d\n", player_pos_x, player_pos_y);
+        Serial.printf("WPos1:%d,%d\n", Player.pos.worldX, Player.pos.worldY);
+        Serial.printf("Pix:%d,%d\n", Player.pos.pX, Player.pos.pY);
 
-        lastX = posXPlayerInWorld;
-        lastY = posYPlayerInWorld;
+        lastX = Player.pos.worldX;
+        lastY = Player.pos.worldY;
     }
 
-    int debugX = (((posXPlayerInWorld)-worldMIN_X) * 16) - currentOffset_X;
-    int debugY = (((posYPlayerInWorld)-worldMIN_Y) * 16) - currentOffset_Y;
+    int debugX = (((Player.pos.worldX) - worldMIN_X) * 16) - currentOffset_X;
+    int debugY = (((Player.pos.worldY) - worldMIN_Y) * 16) - currentOffset_Y;
 
-    int debugXF = (((posXFront)-worldMIN_X) * 16) - currentOffset_X;
+    int debugXF = (((Player.pos.XFront) - worldMIN_X) * 16) - currentOffset_X;
     int debugYF = debugY;
 
     int debugXD = debugX;
-    int debugYD = (((posYDown)-worldMIN_Y) * 16) - currentOffset_Y;
+    int debugYD = (((Player.pos.YDown) - worldMIN_Y) * 16) - currentOffset_Y;
 
     int debugXU = debugX;
-    int debugYU = (((posYUp)-worldMIN_Y) * 16) - currentOffset_Y;
+    int debugYU = (((Player.pos.YUp) - worldMIN_Y) * 16) - currentOffset_Y;
 
     canvas->drawRect(debugX, debugY, 16, 16, ARCADA_WHITE);
     canvas->drawRect(debugXF, debugYF, 16, 16, ARCADA_RED);
     canvas->drawRect(debugXD, debugYD, 16, 16, ARCADA_GREENYELLOW);
     canvas->drawRect(debugXU, debugYU, 16, 16, ARCADA_CYAN);
 
-    //   canvas->drawRect((player_pos_x - (worldMIN_X * 16)) - currentOffset_X, (player_pos_y - (worldMIN_Y * 16)) - currentOffset_Y, 16, 16, ARCADA_BLUE);
+    //   canvas->drawRect((Player.pos.pX - (worldMIN_X * 16)) - currentOffset_X, (Player.pos.pY - (worldMIN_Y * 16)) - currentOffset_Y, 16, 16, ARCADA_BLUE);
 
     for (int enC = 0; enC < CURRENT_LEVEL_ENNEMIES; enC++)
     {
         Tennemy *currentEnnemy = &ENNEMIES[enC];
         if (currentEnnemy->bIsAlive > 0)
         {
-            if ((currentEnnemy->worldX >= worldMIN_X) && (currentEnnemy->worldX <= worldMAX_X))
+            if ((currentEnnemy->worldX >= worldMIN_X - 1) && (currentEnnemy->worldX <= worldMAX_X + 1) && (currentEnnemy->worldY >= worldMIN_Y - 1) && (currentEnnemy->worldY <= worldMAX_Y + 1))
             {
 
-                int px = currentEnnemy->x;
-                int py = currentEnnemy->y;
+                int px = currentEnnemy->x - worldOffset_pX;
+                int py = currentEnnemy->y - worldOffset_pY;
 
-                canvas->drawRect((px - (worldMIN_X * 16)) - currentOffset_X, py - 16, 16, 16, ARCADA_RED);
+                canvas->drawRect(px, py, 16, 16, ARCADA_RED);
             }
         }
     }
@@ -1380,13 +1476,15 @@ void drawHud()
 {
     if (counterActionB > 0)
     {
-        int pX = (((cibleX)-worldMIN_X) * 16) - currentOffset_X;
-        int pY = (((cibleY)-worldMIN_Y) * 16) - currentOffset_Y;
-
-        if (pX > -16 && pX < ARCADA_TFT_WIDTH && pY > -16 && pY < ARCADA_TFT_HEIGHT)
+        if (Player.cible_pX > -16 && Player.cible_pX < ARCADA_TFT_WIDTH && Player.cible_pY > -16 && Player.cible_pY < ARCADA_TFT_HEIGHT)
         {
             //Test action pour le sprite, pour l'instant la pioche
-            drawSprite(pX, pY, pioche.width, pioche.height, pioche.pixel_data, RUN_DIR);
+            drawSprite(Player.cible_pX, Player.cible_pY, pioche.width, pioche.height, pioche.pixel_data, Player.pos.direction);
+            if ((counterActionB % FRAMES_ANIM_ACTION_B) == 0)
+            {
+                parts.createExplosion(Player.cible_pX + 8, Player.cible_pY + 8, 8); //@todo colorer avec la couleur de la brique en cours de travail
+                sndPlayerCanal1.play(AudioSamplePioche);
+            }
         }
     }
 }
@@ -1413,57 +1511,59 @@ void pixelToWorld(int *pX, int *pY)
     int wY = *pY / 16;
 }
 
-int checkCollisionTo(int x, int y, int newX, int newY)
+uint8_t checkCollisionTo(int x, int y, int newX, int newY)
 {
+    for (int wX = x; wX <= newX; wX++)
+    {
+        for (int wY = y; wY <= newY; wY++)
+        {
+            uint8_t value = WORLD[wY][wX];
+            if (value != 0 && value != 0x7F)
+            {
+                return value;
+            }
+        }
+    }
     return 0;
 }
 
 int checkCollisionAt(int newX, int newY)
 {
-    int newposXPlayerInWorld;
-    int newposYPlayerInWorld;
+    int check_worldX = newX / 16;
+    int check_worldY = newY / 16;
 
-    //On ajoute 4 a la pos car le sprite est decallé
-    newposXPlayerInWorld = newX / 16;
-    newposYPlayerInWorld = newY / 16;
-
-    return getWorldAt(newposXPlayerInWorld, newposYPlayerInWorld);
+    return getWorldAt(check_worldX, check_worldY);
 }
 
 void calculatePlayerCoords()
 {
-    posXPlayerInWorld_TL = player_pos_x / 16;
-    posXPlayerInWorld_BR = (player_pos_x + 15) / 16;
-    posYPlayerInWorld_TL = player_pos_y / 16;
-    posYPlayerInWorld_BR = (player_pos_y + 15) / 16;
+    Player.pos.worldX = (Player.pos.pX + 8) / 16;
+    Player.pos.worldY = (Player.pos.pY + 8) / 16;
 
-    posXPlayerInWorld = (player_pos_x + 8) / 16;
-    posYPlayerInWorld = (player_pos_y + 8) / 16;
-
-    if (RUN_DIR <= 0)
+    if (Player.pos.direction <= 0)
     {
-        posXFront = (player_pos_x - 1) / 16;
-        posXFront = max(posXFront, 0);
+        Player.pos.XFront = (Player.pos.pX - 1) / 16;
+        Player.pos.XFront = max(Player.pos.XFront, 0);
     }
     else
     {
-        posXFront = (player_pos_x + 16) / 16;
-        posXFront = min(posXFront, WORLD_WIDTH - 1);
+        Player.pos.XFront = (Player.pos.pX + 16) / 16;
+        Player.pos.XFront = min(Player.pos.XFront, WORLD_WIDTH - 1);
     }
-    posYDown = (player_pos_y + 16) / 16;
-    posYDown = min(posYDown, WORLD_HEIGHT - 1);
+    Player.pos.YDown = (Player.pos.pY + 16) / 16;
+    Player.pos.YDown = min(Player.pos.YDown, WORLD_HEIGHT - 1);
 
-    posYUp = roundf((player_pos_y - 1) / 16);
-    posYDown = max(posYDown, 0);
+    Player.pos.YUp = (Player.pos.pY - 1) / 16;
+    Player.pos.YDown = max(Player.pos.YDown, 0);
 }
 
 void calculateWorldCoordinates()
 {
-    cameraX = player_pos_x - (ARCADA_TFT_WIDTH / 2);
+    cameraX = Player.pos.pX - (ARCADA_TFT_WIDTH / 2);
     cameraX = max(cameraX, 0);
     cameraX = min(cameraX, (WORLD_WIDTH * 16) - ARCADA_TFT_WIDTH);
 
-    cameraY = player_pos_y - (ARCADA_TFT_HEIGHT / 2);
+    cameraY = Player.pos.pY - (ARCADA_TFT_HEIGHT / 2);
     cameraY = max(cameraY, 0);
     cameraY = min(cameraY, (WORLD_HEIGHT * 16) - ARCADA_TFT_HEIGHT);
 
@@ -1480,32 +1580,31 @@ void calculateWorldCoordinates()
     worldMIN_Y = max(worldMIN_Y, 0);
     worldMAX_Y = worldMIN_Y + (ARCADA_TFT_HEIGHT / 16);
     worldMAX_Y = min(worldMAX_Y + 1, WORLD_HEIGHT);
+
+    //Utile pour dessiner les sprites a l'ecran
+    worldOffset_pX = (worldMIN_X * 16) + currentOffset_X;
+    worldOffset_pY = (worldMIN_Y * 16) + currentOffset_Y;
 }
 
 void checkPlayerState()
 {
-    int posYUp = 0;
-
-    posYUp = posYPlayerInWorld_TL - 1;
-    posYUp = max(0, posYUp);
-
     //Deux briques SUR player
-    brique_PLAYER = getWorldAt(posXPlayerInWorld, posYPlayerInWorld);
+    brique_PLAYER = getWorldAt(Player.pos.worldX, Player.pos.worldY);
 
     //Au dessus
-    brique_UP = getWorldAt(posXPlayerInWorld, posYUp);
+    brique_UP = getWorldAt(Player.pos.worldX, Player.pos.YUp);
 
     //En dessous
-    brique_DOWN = getWorldAt(posXPlayerInWorld, posYDown);
-    //  brique_DOWN_FRONT = getWorldAt(posXPlayerInWorld, posYPlayerInWorld + 1);
+    brique_DOWN = getWorldAt(Player.pos.worldX, Player.pos.YDown);
+    //  brique_DOWN_FRONT = getWorldAt(Player.pos.worldX, Player.pos.worldY + 1);
 
     //Devant
-    brique_FRONT = getWorldAt(posXFront, posYPlayerInWorld);
+    brique_FRONT = getWorldAt(Player.pos.XFront, Player.pos.worldY);
 
     switch (brique_PLAYER)
     {
     case 'o':
-        setWorldAt(posXPlayerInWorld, posYPlayerInWorld, 0);
+        setWorldAt(Player.pos.worldX, Player.pos.worldY, 0);
         SCORE++;
         //    sndPlayerCanal1.play(AudioSampleSmb_coin);
         break;
@@ -1530,10 +1629,10 @@ void checkPlayerState()
                 int py = currentItem->y;
 
                 //BBox
-                if (px < player_pos_x + 16 &&
-                    px + 16 > player_pos_x &&
-                    py < player_pos_y + 16 &&
-                    py + 16 > player_pos_y)
+                if (px < Player.pos.pX + 16 &&
+                    px + 16 > Player.pos.pX &&
+                    py < Player.pos.pY + 16 &&
+                    py + 16 > Player.pos.pY)
                 {
                     //  Serial.println("Collision.");
                     //          sndPlayerCanal1.play(AudioSamplePlayershell);
@@ -1561,13 +1660,13 @@ void checkPlayerState()
                 int py = currentEnnemy->y;
 
                 //BBox
-                if (px < player_pos_x + 14 &&
-                    px + 14 > player_pos_x &&
-                    py < player_pos_y + 14 &&
-                    py + 14 > player_pos_y)
+                if (px < Player.pos.pX + 14 &&
+                    px + 14 > Player.pos.pX &&
+                    py < Player.pos.pY + 14 &&
+                    py + 14 > Player.pos.pY)
                 {
                     //  Serial.println("Collision.");
-                    if (bFalling || bRebond)
+                    if (Player.bFalling || bRebond)
                     {
                         //            sndPlayerCanal1.play(AudioSamplePlayershell);
                         SCORE += 5;
@@ -1590,19 +1689,19 @@ void checkPlayerState()
 
 void updatePlayer()
 {
-    bool bWasOnGround = bOnGround;
+    bool bWasOnGround = Player.bOnGround;
 
-    if (bDying)
+    if (Player.bDying)
     {
         jumpPhase += 2;
 
         if (jumpPhase < 14)
         {
-            player_pos_y = player_pos_y - (14 - jumpPhase);
+            Player.pos.pY = Player.pos.pY - (14 - jumpPhase);
         }
         else
         {
-            player_pos_y = player_pos_y + (FALLING_SPEED / 2);
+            Player.pos.pY = Player.pos.pY + (FALLING_SPEED / 2);
         }
     }
     else if (bWin)
@@ -1610,49 +1709,48 @@ void updatePlayer()
         calculatePlayerCoords();
 
         if ((brique_FRONT == 0 || brique_FRONT == BLOCK_UNDERGROUND_AIR) &&
-            ((RUN_DIR > 0 && (player_pos_x < ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH)) ||
-             (RUN_DIR < 0 && (player_pos_x >= 2))))
+            ((Player.pos.direction > 0 && (Player.pos.pX < ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH)) ||
+             (Player.pos.direction < 0 && (Player.pos.pX >= 2))))
         {
-            player_pos_x += 1;
-            bMoving = true;
+            Player.pos.pX += 1;
+            Player.bMoving = true;
         }
 
         //Particules feu artifice ?
-        player_pos_y = player_pos_y + FALLING_SPEED;
+        Player.pos.pY = Player.pos.pY + FALLING_SPEED;
 
         calculatePlayerCoords();
     }
     else
     {
-        #ifdef DEBUG
+#ifdef DEBUG
         if (pressed_buttons & ARCADA_BUTTONMASK_LEFT)
         {
-            player_pos_x -= 4;
-            player_pos_x = max(0, player_pos_x);
+            Player.pos.pX -= 4;
+            Player.pos.pX = max(0, Player.pos.pX);
         }
         if (pressed_buttons & ARCADA_BUTTONMASK_RIGHT)
         {
-            player_pos_x += 4;
-            player_pos_x = min(((WORLD_WIDTH - 1) * 16), player_pos_x);
+            Player.pos.pX += 4;
+            Player.pos.pX = min(((WORLD_WIDTH - 1) * 16), Player.pos.pX);
         }
         if (pressed_buttons & ARCADA_BUTTONMASK_UP)
         {
-            player_pos_y -= 4;
-            player_pos_y = max(0, player_pos_y);
+            Player.pos.pY -= 4;
+            Player.pos.pY = max(0, Player.pos.pY);
         }
         if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
         {
-            player_pos_y += 4;
-            player_pos_y = min(((WORLD_HEIGHT - 1) * 16), player_pos_y);
+            Player.pos.pY += 4;
+            Player.pos.pY = min(((WORLD_HEIGHT - 1) * 16), Player.pos.pY);
         }
-        #else
-            checkPlayerInputs();
-            updatePlayerVelocities();
-            updatePlayerPosition();
+#else
+        checkPlayerInputs();
+        updatePlayerVelocities();
+        updatePlayerPosition();
 
-            checkPlayerCollisionsWorld();
-        #endif
-
+        checkPlayerCollisionsWorld();
+#endif
 
         //Position player
         calculateWorldCoordinates();
@@ -1664,30 +1762,30 @@ void updatePlayer()
 
 void computePlayerAnimations()
 {
-    //Serial.printf("counterActionB:%d bJumping:%d bFalling:%d bOnGround:%d bDoWalk:%d bMoving:%d\n", counterActionB, bJumping, bFalling, bOnGround, bDoWalk, bMoving);
+    //Serial.printf("counterActionB:%d Player.bJumping:%d Player.bFalling:%d bOnGround:%d bDoWalk:%d Player.bMoving:%d\n", counterActionB, Player.bJumping, Player.bFalling, bOnGround, bDoWalk, Player.bMoving);
     if (counterActionB > 0)
     {
-        //@todo : Test type action, 
+        //@todo : Test type action,
         //pour le moment dig
         set_digging();
     }
     else
     {
-        if (bJumping)
+        if (Player.bJumping)
         {
             set_jumping();
         }
-        else if (bFalling)
+        else if (Player.bFalling)
         {
             set_falling();
         }
         else
         {
-            if (bOnGround)
+            if (Player.bOnGround)
             {
                 if (bDoWalk) // demannde de deplacement)
                 {
-                    if (bMoving) //On a bougé
+                    if (Player.bMoving) //On a bougé
                     {
                         set_walking();
                     }
@@ -1705,36 +1803,180 @@ void computePlayerAnimations()
 
 void updateEnnemies()
 {
+    updateEnnemiesIA();
+
     for (int enC = 0; enC < CURRENT_LEVEL_ENNEMIES; enC++)
     {
         Tennemy *currentEnnemy = &ENNEMIES[enC];
         if (currentEnnemy->bIsAlive > 127)
         {
-            if ((currentEnnemy->worldX >= 1) && (currentEnnemy->worldX <= worldMAX_X))
+            //Update velocities
+            //Gravity
+            currentEnnemy->speed_y = currentEnnemy->speed_y + FALLING_SPEED;
+
+            //Frotements
+            /* if (currentEnnemy->bOnGround)
+            {
+                if (currentEnnemy->speed_x > 0)
+                    currentEnnemy->speed_x--;
+                else if (currentEnnemy->speed_x < 0)
+                    currentEnnemy->speed_x++;
+            }*/
+
+            if (currentEnnemy->speed_x > MAX_SPEED_X)
+                currentEnnemy->speed_x = MAX_SPEED_X;
+            else if (currentEnnemy->speed_x < -MAX_SPEED_X)
+                currentEnnemy->speed_x = -MAX_SPEED_X;
+
+            if (currentEnnemy->speed_y > MAX_SPEED_Y)
+                currentEnnemy->speed_y = MAX_SPEED_Y;
+            else if (currentEnnemy->speed_y < -MAX_SPEED_Y)
+                currentEnnemy->speed_y = -MAX_SPEED_Y;
+
+            //update pos
+            if (currentEnnemy->speed_x > 0)
+            {
+                currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
+                currentEnnemy->bMoving = true;
+
+                currentEnnemy->new_x = min(((WORLD_WIDTH - 1) * 16), currentEnnemy->new_x);
+            }
+            else if (currentEnnemy->speed_x < 0)
+            {
+                currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
+                currentEnnemy->bMoving = true;
+
+                currentEnnemy->new_x = max(0, currentEnnemy->new_x);
+            }
+
+            currentEnnemy->new_y = currentEnnemy->y + currentEnnemy->speed_y;
+
+            //collisions
+            checkEnnemyCollisionsWorld(currentEnnemy);
+        }
+    }
+}
+
+void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
+{
+    //X
+    if (currentEnnemy->speed_x <= 0)
+    {
+        uint8_t tileTL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y);
+        uint8_t tileBL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y + 15);
+        if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR))
+        {
+            currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16)) + 16;
+            currentEnnemy->speed_x = -currentEnnemy->speed_x;
+        }
+    }
+    else
+    {
+        uint8_t tileTR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y);
+        uint8_t tileBR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y + 15);
+        if ((tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
+        {
+            currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16));
+            currentEnnemy->speed_x = -currentEnnemy->speed_x;
+        }
+    }
+    //Y
+    currentEnnemy->bOnGround = false;
+    currentEnnemy->bJumping = false;
+    if (currentEnnemy->speed_y <= 0)
+    {
+        //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
+        uint8_t tileTL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y);
+        uint8_t tileTR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y);
+        if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR))
+        {
+            currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16)) + 16;
+            currentEnnemy->speed_y = 0;
+        }
+        else
+        {
+            currentEnnemy->bJumping = true;
+        }
+    }
+    else
+    {
+        Player.bFalling = true;
+        //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
+        uint8_t tileBL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y + 16);
+        uint8_t tileBR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y + 16);
+        if ((tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
+        {
+            currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16));
+            currentEnnemy->bOnGround = true;
+            currentEnnemy->bFalling = false;
+            currentEnnemy->speed_y = 0;
+        }
+    }
+
+    currentEnnemy->x = currentEnnemy->new_x;
+    currentEnnemy->y = currentEnnemy->new_y;
+
+    currentEnnemy->worldX = currentEnnemy->x / 16;
+    currentEnnemy->worldY = currentEnnemy->y / 16;
+}
+
+void updateEnnemiesIA()
+{
+    for (int enC = 0; enC < CURRENT_LEVEL_ENNEMIES; enC++)
+    {
+        Tennemy *currentEnnemy = &ENNEMIES[enC];
+        if (currentEnnemy->bIsAlive > 127)
+        {
+            //if ((currentEnnemy->worldX >= 1) && (currentEnnemy->worldX <= worldMAX_X))
             {
                 currentEnnemy->bIsActive = true;
                 //Deplacement
-                int newX = currentEnnemy->x + currentEnnemy->direction;
-                int posXEnnemyInWorld = newX / 16;
-                int posYEnnemyInWorld = currentEnnemy->y / 16;
+                if (currentEnnemy->type == SPIDER_ENNEMY)
+                {
+                    if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
+                        currentEnnemy->speed_x = SPIDER_WALKING_SPEED;
+                    else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
+                        currentEnnemy->speed_x = -SPIDER_WALKING_SPEED;
 
-                //Deux briques SUR player
-                int brique_ENNEMY = getWorldAt(currentEnnemy->x / 16, posYEnnemyInWorld);
-                int brique_ENNEMY_DOWN = getWorldAt(posXEnnemyInWorld, posYEnnemyInWorld + 1);
-                int brique_ENNEMY_FRONT = getWorldAt(posXEnnemyInWorld, posYEnnemyInWorld);
-                if ((brique_ENNEMY_FRONT <= 'Z') || (brique_ENNEMY_DOWN == 0))
-                {
-                    currentEnnemy->direction = -currentEnnemy->direction;
+                    int distY = abs(currentEnnemy->worldY - Player.pos.worldY);
+
+                    if (distY <= 2)
+                    {
+                        int dist = currentEnnemy->worldX - Player.pos.worldX;
+                        if (dist < 0 && dist > -5)
+                        {
+                            currentEnnemy->speed_x = SPIDER_WALKING_SPEED;
+                        }
+                        else if (dist > 0 && dist < 5)
+                        {
+                            currentEnnemy->speed_x = -SPIDER_WALKING_SPEED;
+                        }
+                    }
                 }
-                else
+                else if (currentEnnemy->type == ZOMBI_ENNEMY)
                 {
-                    currentEnnemy->x = newX;
-                    currentEnnemy->worldX = posXEnnemyInWorld;
-                    currentEnnemy->worldY = posYEnnemyInWorld;
+                    if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
+                        currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
+                    else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
+                        currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
+
+                    if (currentEnnemy->worldY == Player.pos.worldY)
+                    {
+                        int dist = currentEnnemy->worldX - Player.pos.worldX;
+                        if (dist < 0 && dist > -5)
+                        {
+                            currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
+                        }
+                        else if (dist > 0 && dist < 5)
+                        {
+                            currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
+                        }
+                    }
                 }
+                //speed x et speed y (jump)
             }
-            else
-                currentEnnemy->bIsActive = false;
+            //else
+            //   currentEnnemy->bIsActive = false;
         }
     }
 }
@@ -1758,7 +2000,7 @@ void updateItems()
             {
 
                 //Deplacement
-                int newX = currentItem->x + currentItem->direction;
+                int newX = currentItem->x + currentItem->speed_x;
                 int posXItemInWorld = newX / 16;
                 int posYItemInWorld = currentItem->y / 16;
 
@@ -1778,7 +2020,7 @@ void updateItems()
 
                 if ((brique_ITEM_FRONT <= 'Z'))
                 {
-                    currentItem->direction = -currentItem->direction;
+                    currentItem->speed_x = -currentItem->speed_x;
                 }
                 else
                 {
@@ -1796,26 +2038,26 @@ void updateItems()
 void updatePlayerVelocities()
 {
     //Gravity
-    player_speed_y = player_speed_y + FALLING_SPEED;
+    Player.pos.speedY = Player.pos.speedY + FALLING_SPEED;
 
     //Frotements
-    if (bOnGround)
+    if (Player.bOnGround)
     {
-        if (player_speed_x > 0)
-            player_speed_x--;
-        else if (player_speed_x < 0)
-            player_speed_x++;
+        if (Player.pos.speedX > 0)
+            Player.pos.speedX--;
+        else if (Player.pos.speedX < 0)
+            Player.pos.speedX++;
     }
 
-    if (player_speed_x > MAX_SPEED_X)
-        player_speed_x = MAX_SPEED_X;
-    else if (player_speed_x < -MAX_SPEED_X)
-        player_speed_x = -MAX_SPEED_X;
+    if (Player.pos.speedX > MAX_SPEED_X)
+        Player.pos.speedX = MAX_SPEED_X;
+    else if (Player.pos.speedX < -MAX_SPEED_X)
+        Player.pos.speedX = -MAX_SPEED_X;
 
-    if (player_speed_y > MAX_SPEED_Y)
-        player_speed_y = MAX_SPEED_Y;
-    else if (player_speed_y < -MAX_SPEED_Y)
-        player_speed_y = -MAX_SPEED_Y;
+    if (Player.pos.speedY > MAX_SPEED_Y)
+        Player.pos.speedY = MAX_SPEED_Y;
+    else if (Player.pos.speedY < -MAX_SPEED_Y)
+        Player.pos.speedY = -MAX_SPEED_Y;
 }
 
 void updatePlayerPosition()
@@ -1823,149 +2065,192 @@ void updatePlayerPosition()
     //if (bDoWalk)
     {
         //CHECK COLLISION a refaire propre
-        if (player_speed_x > 0)
+        if (Player.pos.speedX > 0)
         {
-            new_player_pos_x = player_pos_x + player_speed_x;
-            bMoving = true;
+            Player.pos.newX = Player.pos.pX + Player.pos.speedX;
+            Player.bMoving = true;
 
-            new_player_pos_x = min(((WORLD_WIDTH - 1) * 16), new_player_pos_x);
+            Player.pos.newX = min(((WORLD_WIDTH - 1) * 16), Player.pos.newX);
         }
-        else if (player_speed_x < 0)
+        else if (Player.pos.speedX < 0)
         {
-            new_player_pos_x = player_pos_x + player_speed_x;
-            bMoving = true;
+            Player.pos.newX = Player.pos.pX + Player.pos.speedX;
+            Player.bMoving = true;
 
-            new_player_pos_x = max(0, new_player_pos_x);
+            Player.pos.newX = max(0, Player.pos.newX);
         }
     }
 
-    new_player_pos_y = player_pos_y + player_speed_y;
+    Player.pos.newY = Player.pos.pY + Player.pos.speedY;
 }
 
 void checkPlayerCollisionsWorld()
 {
     //X
-    if (player_speed_x <= 0)
+    if (Player.pos.speedX <= 0)
     {
-        uint8_t tileTL = getWorldAtPix(new_player_pos_x, player_pos_y);
-        uint8_t tileBL = getWorldAtPix(new_player_pos_x, player_pos_y + 15);
+        uint8_t tileTL = getWorldAtPix(Player.pos.newX, Player.pos.pY);
+        uint8_t tileBL = getWorldAtPix(Player.pos.newX, Player.pos.pY + 15);
         if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR))
         {
-            new_player_pos_x = (new_player_pos_x - (new_player_pos_x % 16)) + 16;
-            player_speed_x = 0;
+            Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + 16;
+            Player.pos.speedX = 0;
         }
     }
     else
     {
-        uint8_t tileTR = getWorldAtPix(new_player_pos_x + 16, player_pos_y);
-        uint8_t tileBR = getWorldAtPix(new_player_pos_x + 16, player_pos_y + 15);
+        uint8_t tileTR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY);
+        uint8_t tileBR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY + 15);
         if ((tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
         {
-            new_player_pos_x = (new_player_pos_x - (new_player_pos_x % 16));
-            player_speed_x = 0;
+            Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16));
+            Player.pos.speedX = 0;
         }
     }
     //Y
-    bOnGround = false;
-    bJumping = false;
-    if (player_speed_y <= 0)
+    Player.bOnGround = false;
+    Player.bJumping = false;
+    if (Player.pos.speedY <= 0)
     {
-        //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite
-        uint8_t tileTL = getWorldAtPix(new_player_pos_x + 5, new_player_pos_y);
-        uint8_t tileTR = getWorldAtPix(new_player_pos_x + 12, new_player_pos_y);
+        //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
+        uint8_t tileTL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY);
+        uint8_t tileTR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY);
         if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR))
         {
-            new_player_pos_y = (new_player_pos_y - (new_player_pos_y % 16)) + 16;
-            player_speed_y = 0;
+            Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16)) + 16;
+            Player.pos.speedY = 0;
         }
         else
         {
-            bJumping = true;
+            Player.bJumping = true;
         }
     }
     else
     {
-        bFalling = true;
-        //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite
-        uint8_t tileBL = getWorldAtPix(new_player_pos_x + 5, new_player_pos_y + 16);
-        uint8_t tileBR = getWorldAtPix(new_player_pos_x + 12, new_player_pos_y + 16);
+        Player.bFalling = true;
+        //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
+        uint8_t tileBL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY + 16);
+        uint8_t tileBR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY + 16);
         if ((tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
         {
-            new_player_pos_y = (new_player_pos_y - (new_player_pos_y % 16));
-            bOnGround = true;
-            bFalling = false;
-            player_speed_y = 0;
+            Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16));
+            Player.bOnGround = true;
+            Player.bFalling = false;
+            Player.pos.speedY = 0;
         }
     }
 
-    player_pos_x = new_player_pos_x;
-    player_pos_y = new_player_pos_y;
+    Player.pos.pX = Player.pos.newX;
+    Player.pos.pY = Player.pos.newY;
 }
 
 void checkPlayerInputs()
 {
     bDoWalk = false;
 
-    if ((pressed_buttons & ARCADA_BUTTONMASK_B) && bOnGround)
+    if (just_pressed & ARCADA_BUTTONMASK_SELECT)
+    {
+        //
+        if (gameState == STATE_PAUSE_MENU)
+            gameState = STATE_PLAYING;
+        else if (gameState == STATE_PLAYING)
+        {
+            gameState = STATE_PAUSE_MENU;
+        }
+    }
+    else if (just_pressed & ARCADA_BUTTONMASK_START)
+    {
+        //Menu personnage
+        if (gameState == STATE_GAME_MENU)
+            gameState = STATE_PLAYING;
+        else if (gameState == STATE_PLAYING)
+        {
+            gameState = STATE_GAME_MENU;
+        }
+    }
+
+    if (coolDownActionB <= 0 && (pressed_buttons & ARCADA_BUTTONMASK_B) && Player.bOnGround)
     {
         counterActionB++;
-        int lastCibleX = cibleX;
-        int lastCibleY = cibleY;
-        //Ciblage
-        if ((pressed_buttons & ARCADA_BUTTONMASK_LEFT) || (pressed_buttons & ARCADA_BUTTONMASK_RIGHT))
+
+        int lastCibleX = Player.cible_wX;
+        int lastCibleY = Player.cible_wY;
+
+        //Ciblage, on laisse un peu de temps pour locker la cible
+        if (counterActionB < FRAMES_LOCK_ACTION_B)
         {
-            if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
+            if ((pressed_buttons & ARCADA_BUTTONMASK_LEFT) || (pressed_buttons & ARCADA_BUTTONMASK_RIGHT))
             {
-                cibleX = posXFront;
-                cibleY = posYDown;
-            }
-            else if (pressed_buttons & ARCADA_BUTTONMASK_UP)
-            {
-                cibleX = posXFront;
-                cibleY = posYUp;
+                if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
+                {
+                    Player.cible_wX = Player.pos.XFront;
+                    Player.cible_wY = Player.pos.YDown;
+                }
+                else if (pressed_buttons & ARCADA_BUTTONMASK_UP)
+                {
+                    Player.cible_wX = Player.pos.XFront;
+                    Player.cible_wY = Player.pos.YUp;
+                }
+                else
+                {
+                    Player.cible_wX = Player.pos.XFront;
+                    Player.cible_wY = Player.pos.worldY;
+                }
             }
             else
             {
-                cibleX = posXFront;
-                cibleY = posYPlayerInWorld;
-            }
-        }
-        else
-        {
-            if (pressed_buttons & ARCADA_BUTTONMASK_UP)
-            {
-                cibleX = posXPlayerInWorld;
-                cibleY = posYUp;
-            }
-            else
-            {
-                cibleX = posXPlayerInWorld;
-                cibleY = posYDown;
+                if (pressed_buttons & ARCADA_BUTTONMASK_UP)
+                {
+                    Player.cible_wX = Player.pos.worldX;
+                    Player.cible_wY = Player.pos.YUp;
+                }
+                else if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
+                {
+                    Player.cible_wX = Player.pos.worldX;
+                    Player.cible_wY = Player.pos.YDown;
+                }
+                else
+                {
+                    //'Devant'
+                    Player.cible_wX = Player.pos.XFront;
+                    Player.cible_wY = Player.pos.worldY;
+                }
             }
         }
 
-        if ((cibleX != lastCibleX) || (cibleY != lastCibleY))
+        if ((Player.cible_wX != lastCibleX) || (Player.cible_wY != lastCibleY))
+        {
             counterActionB = 0;
+            Player.cible_pX = ((Player.cible_wX - worldMIN_X) * 16) - currentOffset_X;
+            Player.cible_pY = ((Player.cible_wY - worldMIN_Y) * 16) - currentOffset_Y;
+        }
 
-        if (counterActionB > 15 * 3) //Action (pour le moment minage seulement)
+        if (counterActionB >= FRAMES_ACTION_B) //Action (pour le moment minage seulement)
         {
             uint8_t value = 0xFF;
             //DIG bDoJump = true;
             //Thrust
             counterActionB = 0;
+            coolDownActionB = FRAMES_COOLDOWN_B;
+            lastCibleX = lastCibleY = 0;
 
-            value = getWorldAt(cibleX, cibleY);
+            value = getWorldAt(Player.cible_wX, Player.cible_wY);
 
-            //Serial.printf("Dig:%d,%d v:%d\n", cibleX, cibleY, value);
-            if (value != 0 && value != BLOCK_UNDERGROUND_AIR && posYDown < (WORLD_HEIGHT - 1))
+            //Serial.printf("Dig:%d,%d v:%d\n", Player.cible_wX, Player.cible_wY, value);
+            if (value != 0 && value != BLOCK_UNDERGROUND_AIR && Player.pos.YDown < (WORLD_HEIGHT - 1))
             {
                 if (value < BLOCK_ROCK)
                     value = BLOCK_AIR;
                 else
                     value = BLOCK_UNDERGROUND_AIR;
 
-                setWorldAt(cibleX, cibleY, value);
-                updateHauteurColonne(cibleX, cibleY);
+                // @todo : tester le type de value
+                sndPlayerCanal1.play(AudioSampleRock_break);
+                parts.createExplosion(Player.cible_pX + 8, Player.cible_pY + 8, 12); //@todo colorer avec la couleur de la brique en cours de travail
+                // @todo span item ramassable ? ou tile ramassable ?
+
+                setWorldAt(Player.cible_wX, Player.cible_wY, value);
+                updateHauteurColonne(Player.cible_wX, Player.cible_wY);
                 //update hauteur colonne
             }
         }
@@ -1976,46 +2261,49 @@ void checkPlayerInputs()
     }
     else
     {
+        if (coolDownActionB > 0)
+            coolDownActionB--;
+
         counterActionB = 0;
-        //cibleX = cibleY = 0;
+        //Player.cible_wX = Player.cible_wY = 0;
 
         if (just_pressed & ARCADA_BUTTONMASK_A)
         {
-            if (player_speed_y == 0 && bOnGround)
+            if (Player.pos.speedY == 0 && Player.bOnGround)
             {
                 bDoJump = true;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
-                player_speed_y = -JUMP_SPEED;
+                Player.pos.speedY = -JUMP_SPEED;
             }
         }
 
         if (pressed_buttons & ARCADA_BUTTONMASK_LEFT)
         {
-            RUN_DIR = -1;
+            Player.pos.direction = -1;
             bDoWalk = true;
-            if (bOnGround)
-                player_speed_x += -RUNNING_SPEED;
+            if (Player.bOnGround)
+                Player.pos.speedX += -RUNNING_SPEED;
             else
             {
-                if (player_speed_y < 0)
-                    player_speed_x += -WALKING_SPEED;
-                else if (player_speed_x == 0)
-                    player_speed_x = -WALKING_SPEED;
+                if (Player.pos.speedY < 0)
+                    Player.pos.speedX += -WALKING_SPEED;
+                else if (Player.pos.speedX == 0)
+                    Player.pos.speedX = -WALKING_SPEED;
             }
         }
         else if (pressed_buttons & ARCADA_BUTTONMASK_RIGHT)
         {
-            RUN_DIR = 1;
+            Player.pos.direction = 1;
             bDoWalk = true;
-            if (bOnGround)
-                player_speed_x += RUNNING_SPEED;
+            if (Player.bOnGround)
+                Player.pos.speedX += RUNNING_SPEED;
             else
             {
-                if (player_speed_y < 0)
-                    player_speed_x += WALKING_SPEED;
-                else if (player_speed_x == 0)
-                    player_speed_x = WALKING_SPEED;
+                if (Player.pos.speedY < 0)
+                    Player.pos.speedX += WALKING_SPEED;
+                else if (Player.pos.speedX == 0)
+                    Player.pos.speedX = WALKING_SPEED;
             }
         }
     }
@@ -2024,9 +2312,9 @@ void checkPlayerInputs()
 void updateGame()
 {
     int lastX = 0;
-    bMoving = false;
+    Player.bMoving = false;
 
-    if (bDying)
+    if (Player.bDying)
     {
         count_player_die++;
         if (count_player_die >= PLAYER_DIE_FRAMES)
@@ -2054,9 +2342,8 @@ void updateGame()
 
         updatePlayer();
 
-        /*
         updateEnnemies();
-        updateItems();*/
+        updateItems();
 
         lastX = cameraX;
     }
@@ -2065,18 +2352,346 @@ void updateGame()
     parts.moveParticles();
 }
 
-void updateMenu()
+void initMenu()
 {
-    if (just_pressed & ARCADA_BUTTONMASK_A)
-        gameState = STATE_PLAYING;
+
+    arcada.display->setTextColor(ARCADA_GREEN);
 }
 
-void displayMenu()
+void updateGameMenu()
+{
+}
+
+void displayGameMenu()
+{
+    static int menu_page = 0;
+
+    const char *titles[] = {"Personnage", "Inventaire", "Craft", "Sauv."};
+    //Onglets : character, inventaire, crafting
+    int ret = 0;
+    do
+    {
+        arcada.display->fillScreen(ARCADA_MAROON);
+        switch (menu_page)
+        {
+        case 0:
+        {
+            const char *selection[] = {"Force", "Magie"};
+            ret = Game_Menu(titles[menu_page], selection, 2, ARCADA_WHITE, ARCADA_BLACK);
+            break;
+        }
+        case 1:
+        {
+            const char *selection[] = {"Armes", "Armures"};
+            ret = Game_Menu(titles[menu_page], selection, 2, ARCADA_WHITE, ARCADA_BLACK);
+            break;
+        }
+        case 2:
+        {
+            const char *selection[] = {"Armes", "Armures"};
+            ret = Game_Menu(titles[menu_page], selection, 2, ARCADA_WHITE, ARCADA_BLACK);
+            break;
+        }
+        case 3:
+        {
+            const char *selection[] = {"Emplacement 1", "Emplacement 2", "Emplacement 3", "Emplacement 4", "Emplacement 5"};
+            ret = Game_Menu(titles[menu_page], selection, 5, ARCADA_WHITE, ARCADA_BLACK);
+            if (ret >= 0 && ret <= 4)
+            {
+                //Save
+                if (SaveGame(ret + 1))
+                {
+                    arcada.infoBox("Sauvegarde OK.", ARCADA_BUTTONMASK_A);
+                    ret = 255;                    
+                }
+                else
+                    arcada.errorBox("Erreur !", ARCADA_BUTTONMASK_A);
+            }
+            break;
+        }
+        }
+        if (ret == 127)
+        {
+            menu_page++;
+            if (menu_page > 3)
+                menu_page = 0;
+        }
+    } while (ret != 255);
+
+    gameState = STATE_PLAYING;
+}
+
+static uint8_t maxCharPerLine, fontSize;
+static uint16_t charHeight, charWidth;
+
+void _initAlertFonts(void)
+{
+    fontSize = 1;
+    if (arcada.display->width() > 200)
+    {
+        fontSize = 2;
+    }
+    charHeight = 8 * fontSize;
+    charWidth = 6 * fontSize;
+    maxCharPerLine = arcada.display->width() / (6 * fontSize) - 6;
+}
+
+uint8_t Game_Menu(const char *menu_name, const char **menu_strings,
+                  uint8_t menu_num, uint16_t boxColor,
+                  uint16_t textColor)
+{
+
+    _initAlertFonts();
+    arcada.display->setTextSize(fontSize);
+
+    uint16_t max_len = 0;
+    for (int i = 0; i < menu_num; i++)
+    {
+        // Serial.printf("#%d '%s' -> %d\n", i, menu_strings[i],
+        // strlen(menu_strings[i]));
+        max_len = max(max_len, strlen(menu_strings[i]));
+    }
+
+    arcada.display->fillRoundRect(2, 2, arcada.display->width() - 4, charHeight + 4, 3, ARCADA_BLUE);
+    arcada.display->drawRoundRect(2, 2, arcada.display->width() - 4, charHeight + 4, 3, ARCADA_WHITE);
+    int titleWidth = charWidth * (strlen(menu_name));
+    arcada.display->setTextColor(ARCADA_WHITE);
+    arcada.display->setCursor((arcada.display->width() - titleWidth) / 2, 4);
+    arcada.display->print(menu_name);
+
+    arcada.display->fillRoundRect(2, 16, arcada.display->width() - 4, arcada.display->height() - 20, 3, ARCADA_BLUE);
+    arcada.display->drawRoundRect(2, 16, arcada.display->width() - 4, arcada.display->height() - 20, 3, ARCADA_WHITE);
+
+    uint16_t boxWidth = (max_len + 4) * charWidth;
+    uint16_t boxHeight = (menu_num + 2) * charHeight;
+    uint16_t boxX = (arcada.display->width() - boxWidth) / 2;
+    uint16_t boxY = (arcada.display->height() - boxHeight) / 2;
+
+    // draw the outline box
+    arcada.display->fillRoundRect(boxX, boxY, boxWidth, boxHeight, charWidth, boxColor);
+    arcada.display->drawRoundRect(boxX, boxY, boxWidth, boxHeight, charWidth, textColor);
+
+    // Print the selection hint
+    const char *buttonString = "A";
+    uint16_t fontX =
+        boxX + boxWidth - (strlen(buttonString) + 1) * charWidth + 2 * fontSize;
+    uint16_t fontY = boxY + boxHeight - charHeight;
+    arcada.display->fillRoundRect(fontX, fontY, (strlen(buttonString) + 2) * charWidth,
+                                  charHeight * 2, charWidth, textColor);
+    arcada.display->drawRoundRect(fontX, fontY, (strlen(buttonString) + 2) * charWidth,
+                                  charHeight * 2, charWidth, boxColor);
+    arcada.display->setCursor(fontX + charWidth, fontY + charHeight / 2);
+    arcada.display->setTextColor(boxColor);
+    arcada.display->print(buttonString);
+
+    // draw and select the menu
+    int8_t selected = 0;
+    fontX = boxX + charWidth / 2;
+    fontY = boxY + charHeight;
+
+    // wait for any buttons to be released
+    while (arcada.readButtons())
+        delay(10);
+
+    while (1)
+    {
+        for (int i = 0; i < menu_num; i++)
+        {
+            if (i == selected)
+            {
+                arcada.display->setTextColor(boxColor, textColor);
+            }
+            else
+            {
+                arcada.display->setTextColor(textColor, boxColor);
+            }
+            arcada.display->setCursor(fontX, fontY + charHeight * i);
+            arcada.display->print(" ");
+            arcada.display->print(menu_strings[i]);
+            for (int j = strlen(menu_strings[i]); j < max_len + 2; j++)
+            {
+                arcada.display->print(" ");
+            }
+        }
+
+        while (1)
+        {
+            delay(10);
+            arcada.readButtons();
+            uint32_t released = arcada.justReleasedButtons();
+            if (released & ARCADA_BUTTONMASK_UP)
+            {
+                selected--;
+                if (selected < 0)
+                    selected = menu_num - 1;
+                break;
+            }
+            if (released & ARCADA_BUTTONMASK_DOWN)
+            {
+                selected++;
+                if (selected > menu_num - 1)
+                    selected = 0;
+                break;
+            }
+            if (released & ARCADA_BUTTONMASK_A)
+            {
+                return selected;
+            }
+            if ((released & ARCADA_BUTTONMASK_B) || (released & ARCADA_BUTTONMASK_START))
+            {
+                return 255;
+            }
+            if (released & ARCADA_BUTTONMASK_SELECT)
+            {
+                return 127;
+            }
+        }
+    }
+    return selected;
+}
+
+bool LoadGame(uint8_t numEmplacement)
+{
+    bool ret = false;
+
+    char fileName[80];
+
+    sprintf(fileName, "/saves/LO_%02d.sav", numEmplacement);
+
+    //Lecture du fichier
+    File data = arcada.open(fileName, FILE_READ);
+    if (data)
+    {
+        //read player stats
+        //read ennemies, items, etc.
+        //read world
+
+        data.seek(0);
+
+        data.read(); // [
+        for (int wY = 0; wY < WORLD_HEIGHT + 2; wY++)
+        {
+            for (int wX = 0; wX < WORLD_WIDTH; wX++)
+            {
+                char buff[5];
+                buff[0] = data.read();
+                buff[1] = data.read();
+                buff[2] = data.read();
+                buff[3] = 0;
+                data.read(); // ,
+                int value = strtol(buff, 0, 10);
+                WORLD[wY][wX] = (uint8_t)value;
+            }
+        }
+        data.read(); //  ]
+        //read world infos
+
+        //data.read();
+        data.close();
+
+        ret = true;
+    }
+    return ret;
+}
+
+bool SaveGame(uint8_t numEmplacement)
+{
+    bool ret = false;
+
+    char fileName[80];
+
+    sprintf(fileName, "/saves/LO_%02d.sav", numEmplacement);
+    //Enreg du fichier
+    File data = arcada.open(fileName, (O_RDWR | O_CREAT | O_TRUNC));
+    //read player stats
+    //read ennemies, items, etc.
+    //read world
+    if (data)
+    {
+        data.write('[');
+        for (int wY = 0; wY < WORLD_HEIGHT + 2; wY++)
+        {
+            for (int wX = 0; wX < WORLD_WIDTH; wX++)
+            {
+                uint8_t value = WORLD[wY][wX];
+                char buff[5];
+                sprintf(buff, "%03d,", value);
+                data.write(buff[0]);
+                data.write(buff[1]);
+                data.write(buff[2]);
+                data.write(buff[3]);
+            }
+        }
+        data.write(']');
+        //read world infos
+
+        data.flush();
+        data.close();
+
+        ret = true;
+    }
+    return ret;
+}
+
+void updatePauseMenu()
+{
+}
+
+void displayPauseMenu()
 {
     // digital clock display of the time
-    arcada.display->fillScreen(ARCADA_GREEN);
+    arcada.display->fillScreen(ARCADA_BLUE);
+    const char *selection[] = {"EN CONSTRUCTION"};
+    uint8_t selected = arcada.menu(selection, 1, ARCADA_WHITE, ARCADA_BLACK, true);
 
-    arcada.infoBox("Press A", 0);
+    if (selected == 0)
+    {
+        gameState = STATE_PLAYING;
+    }
+    else
+    {
+        gameState = STATE_PLAYING;
+    }
+}
+void updateMainMenu()
+{
+}
+
+void displayMainMenu()
+{
+    // digital clock display of the time
+    arcada.display->fillScreen(ARCADA_BLUE);
+
+    const char *selection[] = {"Nouvelle partie", "Charger", "Options"};
+    uint8_t selected = arcada.menu(selection, 3, ARCADA_WHITE, ARCADA_BLACK);
+
+    if (selected == 0)
+    {
+        //Create player...etc
+        // @todo finir
+        initGame();
+        gameState = STATE_PLAYING;
+    }
+    else if (selected == 1)
+    {
+        // wait for button release
+        while (arcada.readButtons())
+        {
+            delay(10);
+        }
+        initGame();
+
+        const char *selection_empl[] = {"Emplacement 1", "Emplacement 2", "Emplacement 3", "Emplacement 4", "Emplacement 5"};
+        uint8_t selected_empl = arcada.menu(selection_empl, 5, ARCADA_WHITE, ARCADA_BLACK, true);
+        if (selected_empl >= 0 && selected_empl <= 4)
+            if (LoadGame(selected_empl + 1))
+            {
+                arcada.infoBox("Chargement OK.", ARCADA_BUTTONMASK_A);
+                gameState = STATE_PLAYING;
+            }
+            else
+                arcada.errorBox("Erreur.", ARCADA_BUTTONMASK_A);
+    }
 }
 
 void readInputs()
@@ -2094,20 +2709,29 @@ void loop()
         startTime = millis();
 
         readInputs();
-        if (gameState == STATE_MENU)
+        if (gameState == STATE_MAIN_MENU)
         {
-            updateMenu();
-            displayMenu();
+            updateMainMenu();
+            displayMainMenu();
         }
         else if (gameState == STATE_PLAYING)
         {
             updateGame();
             displayGame();
         }
-
+        else if (gameState == STATE_PAUSE_MENU)
+        {
+            updatePauseMenu();
+            displayPauseMenu();
+        }
+        else if (gameState == STATE_GAME_MENU)
+        {
+            updateGameMenu();
+            displayGameMenu();
+        }
         elapsedTime = millis() - startTime;
 
-      //  Serial.printf("E:%d\n", elapsedTime);
+        //Serial.printf("E:%d\n", elapsedTime);
         tick.repeat();
     }
     updateSoundManager();
@@ -2115,103 +2739,104 @@ void loop()
 
 void anim_player_idle()
 {
-    if (player_current_framerate == PLAYER_FRAMERATE_IDLE)
+    if (Player.current_framerate == PLAYER_FRAMERATE_IDLE)
     {
-        player_anim++;
-        player_current_framerate = 0;
+        Player.anim++;
+        Player.current_framerate = 0;
     }
-    player_current_framerate++;
+    Player.current_framerate++;
 
-    if (player_anim > PLAYER_FRAME_IDLE_3)
+    if (Player.anim > PLAYER_FRAME_IDLE_3)
     {
-        player_anim = PLAYER_FRAME_IDLE_1;
+        Player.anim = PLAYER_FRAME_IDLE_1;
     }
 
-    switch (player_anim)
+    switch (Player.anim)
     {
     case PLAYER_FRAME_IDLE_1:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_idle1.width, player_idle1.height, player_idle1.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_idle1.width, player_idle1.height, player_idle1.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_IDLE_2:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_idle2.width, player_idle2.height, player_idle2.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_idle2.width, player_idle2.height, player_idle2.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_IDLE_3:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_idle3.width, player_idle3.height, player_idle3.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_idle3.width, player_idle3.height, player_idle3.pixel_data, Player.pos.direction);
         break;
     }
 }
 
-void anim_player_diging() {
-    if (player_current_framerate == PLAYER_FRAMERATE_ACTION)
+void anim_player_digging()
+{
+    if (Player.current_framerate == PLAYER_FRAMERATE_ACTION)
     {
-        player_anim++;
-        player_current_framerate = 0;
+        Player.anim++;
+        Player.current_framerate = 0;
     }
-    player_current_framerate++;
+    Player.current_framerate++;
 
-    if (player_anim > PLAYER_FRAME_ACTION_6)
+    if (Player.anim > PLAYER_FRAME_ACTION_6)
     {
-        player_anim = PLAYER_FRAME_ACTION_1;
+        Player.anim = PLAYER_FRAME_ACTION_1;
     }
 
-    switch (player_anim)
+    switch (Player.anim)
     {
     case PLAYER_FRAME_ACTION_1:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_action1.width, player_action1.height, player_action1.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action1.width, player_action1.height, player_action1.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_ACTION_2:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_action2.width, player_action2.height, player_action2.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action2.width, player_action2.height, player_action2.pixel_data, Player.pos.direction);
 
         break;
     case PLAYER_FRAME_ACTION_3:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_action3.width, player_action3.height, player_action3.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action3.width, player_action3.height, player_action3.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_ACTION_4:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_action4.width, player_action4.height, player_action4.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action4.width, player_action4.height, player_action4.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_ACTION_5:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_action5.width, player_action5.height, player_action5.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action5.width, player_action5.height, player_action5.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_ACTION_6:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_action6.width, player_action6.height, player_action6.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action6.width, player_action6.height, player_action6.pixel_data, Player.pos.direction);
         break;
     }
 }
 
 void anim_player_walk()
 {
-    if (player_current_framerate == PLAYER_FRAMERATE_WALK)
+    if (Player.current_framerate == PLAYER_FRAMERATE_WALK)
     {
-        player_anim++;
-        player_current_framerate = 0;
+        Player.anim++;
+        Player.current_framerate = 0;
     }
-    player_current_framerate++;
+    Player.current_framerate++;
 
-    if (player_anim > PLAYER_FRAME_WALK_6)
+    if (Player.anim > PLAYER_FRAME_WALK_6)
     {
-        player_anim = PLAYER_FRAME_WALK_1;
+        Player.anim = PLAYER_FRAME_WALK_1;
     }
 
-    switch (player_anim)
+    switch (Player.anim)
     {
     case PLAYER_FRAME_WALK_1:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_walk1.width, player_walk1.height, player_walk1.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk1.width, player_walk1.height, player_walk1.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_WALK_2:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_walk2.width, player_walk2.height, player_walk2.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk2.width, player_walk2.height, player_walk2.pixel_data, Player.pos.direction);
 
         break;
     case PLAYER_FRAME_WALK_3:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_walk3.width, player_walk3.height, player_walk3.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk3.width, player_walk3.height, player_walk3.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_WALK_4:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_walk4.width, player_walk4.height, player_walk4.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk4.width, player_walk4.height, player_walk4.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_WALK_5:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_walk5.width, player_walk5.height, player_walk5.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk5.width, player_walk5.height, player_walk5.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_WALK_6:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_walk6.width, player_walk6.height, player_walk6.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk6.width, player_walk6.height, player_walk6.pixel_data, Player.pos.direction);
         break;
     }
 }
@@ -2219,28 +2844,28 @@ void anim_player_walk()
 void anim_player_jump()
 {
 
-    if (player_current_framerate == PLAYER_FRAMERATE_JUMP)
+    if (Player.current_framerate == PLAYER_FRAMERATE_JUMP)
     {
-        player_anim++;
-        player_current_framerate = 0;
+        Player.anim++;
+        Player.current_framerate = 0;
     }
-    player_current_framerate++;
+    Player.current_framerate++;
 
-    if (player_anim > PLAYER_FRAME_JUMP_3)
+    if (Player.anim > PLAYER_FRAME_JUMP_3)
     {
-        player_anim = PLAYER_FRAME_JUMP_3; //On reste sur 3
+        Player.anim = PLAYER_FRAME_JUMP_3; //On reste sur 3
     }
 
-    switch (player_anim)
+    switch (Player.anim)
     {
     case PLAYER_FRAME_JUMP_1:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_jump1.width, player_jump1.height, player_jump1.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump1.width, player_jump1.height, player_jump1.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_JUMP_2:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_jump2.width, player_jump2.height, player_jump2.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump2.width, player_jump2.height, player_jump2.pixel_data, Player.pos.direction);
         break;
     case PLAYER_FRAME_JUMP_3:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_jump3.width, player_jump3.height, player_jump3.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump3.width, player_jump3.height, player_jump3.pixel_data, Player.pos.direction);
         break;
     }
 }
@@ -2248,22 +2873,22 @@ void anim_player_jump()
 void anim_player_falling()
 {
 
-    if (player_current_framerate == PLAYER_FRAMERATE_FALLING)
+    if (Player.current_framerate == PLAYER_FRAMERATE_FALLING)
     {
-        player_anim++;
-        player_current_framerate = 0;
+        Player.anim++;
+        Player.current_framerate = 0;
     }
-    player_current_framerate++;
+    Player.current_framerate++;
 
-    if (player_anim > PLAYER_FRAME_FALLING_1)
+    if (Player.anim > PLAYER_FRAME_FALLING_1)
     {
-        player_anim = PLAYER_FRAME_FALLING_1; //On reste sur 1
+        Player.anim = PLAYER_FRAME_FALLING_1; //On reste sur 1
     }
 
-    switch (player_anim)
+    switch (Player.anim)
     {
     case PLAYER_FRAME_FALLING_1:
-        drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_falling1.width, player_falling1.height, player_falling1.pixel_data, RUN_DIR);
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_falling1.width, player_falling1.height, player_falling1.pixel_data, Player.pos.direction);
         break;
     }
 }
@@ -2275,23 +2900,23 @@ void anim_player_mining()
 void anim_player_dying()
 {
 
-    if (player_current_framerate == PLAYER_FRAMERATE_DIE)
+    if (Player.current_framerate == PLAYER_FRAMERATE_DIE)
     {
-        player_anim++;
-        player_current_framerate = 0;
+        Player.anim++;
+        Player.current_framerate = 0;
     }
-    player_current_framerate++;
+    Player.current_framerate++;
 
-    if (player_anim > PLAYER_FRAME_DIE_1)
+    if (Player.anim > PLAYER_FRAME_DIE_1)
     {
-        player_anim = PLAYER_FRAME_DIE_1;
+        Player.anim = PLAYER_FRAME_DIE_1;
     }
     /*
-  switch (player_anim)
+  switch (Player.anim)
   {
   case PLAYER_FRAME_DIE_1:
-    //    drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_width, player_height, player_die_bits, RUN_DIR);
-    drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_die.width, player_die.height, player_die.pixel_data, RUN_DIR);
+    //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player_die_bits, Player.pos.direction);
+    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_die.width, player_die.height, player_die.pixel_data, Player.pos.direction);
     break;
   }*/
 }
@@ -2299,34 +2924,34 @@ void anim_player_dying()
 void anim_player_wining()
 {
 
-    if (player_current_framerate == PLAYER_FRAMERATE_WIN)
+    if (Player.current_framerate == PLAYER_FRAMERATE_WIN)
     {
-        player_anim++;
-        player_current_framerate = 0;
+        Player.anim++;
+        Player.current_framerate = 0;
         if (random(5) == 0)
             parts.createExplosion(random(10, SCREEN_WIDTH - 10), 10 + (rand() % 2 * SCREEN_HEIGHT / 3), 100 + rand() % 50, random(65535));
     }
-    player_current_framerate++;
+    Player.current_framerate++;
 
-    if (player_anim > PLAYER_FRAME_WIN_3)
+    if (Player.anim > PLAYER_FRAME_WIN_3)
     {
-        player_anim = PLAYER_FRAME_WIN_1;
+        Player.anim = PLAYER_FRAME_WIN_1;
     }
     /*
-  switch (player_anim)
+  switch (Player.anim)
   {
   case PLAYER_FRAME_WIN_1:
-    //    drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_width, player_height, player4, RUN_DIR);
-      drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_idle1.width, player_idle1.height, player_idle1.pixel_data, RUN_DIR);
+    //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player4, Player.pos.direction);
+      drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_idle1.width, player_idle1.height, player_idle1.pixel_data, Player.pos.direction);
     break;
   case PLAYER_FRAME_WIN_2:
-    //drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_width, player_height, player2, RUN_DIR);
-      drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_run1.width, player_run1.height, player_run1.pixel_data, RUN_DIR);
+    //drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player2, Player.pos.direction);
+      drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_run1.width, player_run1.height, player_run1.pixel_data, Player.pos.direction);
 
     break;
   case PLAYER_FRAME_WIN_3:
-    //    drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_width, player_height, player3, RUN_DIR);
-      drawSprite(player_pos_x - cameraX, player_pos_y - cameraY, player_run2.width, player_run2.height, player_run2.pixel_data, RUN_DIR);
+    //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player3, Player.pos.direction);
+      drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_run2.width, player_run2.height, player_run2.pixel_data, Player.pos.direction);
     break;
   }*/
 }
