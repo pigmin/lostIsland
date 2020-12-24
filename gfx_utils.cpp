@@ -11,16 +11,45 @@ uint16_t rgbTo565(uint8_t red, uint8_t green, uint8_t blue)
 
   return Rgb565;
 }
-
-void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int8_t DIR, int light)
-{
-  uint16_t idx = 0;
 /*
+void PixelGameEngine::DrawSprite(int32_t x, int32_t y, Sprite* sprite, uint32_t scale, uint8_t flip)
+	{
+		if (sprite == nullptr)
+			return;
+
 		int32_t fxs = 0, fxm = 1, fx = 0;
 		int32_t fys = 0, fym = 1, fy = 0;
 		if (flip & olc::Sprite::Flip::HORIZ) { fxs = sprite->width - 1; fxm = -1; }
 		if (flip & olc::Sprite::Flip::VERT) { fys = sprite->height - 1; fym = -1; }
-    */
+
+		if (scale > 1)
+		{
+			fx = fxs;
+			for (int32_t i = 0; i < sprite->width; i++, fx += fxm)
+			{
+				fy = fys;
+				for (int32_t j = 0; j < sprite->height; j++, fy += fym)
+					for (uint32_t is = 0; is < scale; is++)
+						for (uint32_t js = 0; js < scale; js++)
+							Draw(x + (i * scale) + is, y + (j * scale) + js, sprite->GetPixel(fx, fy));
+			}
+		}
+		else
+		{
+			fx = fxs;
+			for (int32_t i = 0; i < sprite->width; i++, fx += fxm)
+			{
+				fy = fys;
+				for (int32_t j = 0; j < sprite->height; j++, fy += fym)
+					Draw(x + i, y + j, sprite->GetPixel(fx, fy));
+			}
+		}
+	}
+  */
+void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int8_t DIR, int light)
+{
+  uint16_t idx = 0;
+
   if (light < 0)
   {
 

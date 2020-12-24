@@ -1,6 +1,10 @@
 #ifndef LI_TYPES_H
 #define LI_TYPES_H
 
+#define MAX_QUICK_ITEMS 8
+
+#define MAX_ITEMS 32
+
 typedef struct TPos
 {
   int pX, pY;
@@ -20,9 +24,9 @@ typedef struct TPlayer
 {
   TPos pos;
 
-  int anim;
-  int current_framerate;
-  int stateAnim;
+  uint8_t anim;
+  uint8_t current_framerate;
+  uint8_t stateAnim;
 
   int cible_wX, cible_wY;
   int cible_pX, cible_pY;
@@ -34,8 +38,13 @@ typedef struct TPlayer
   bool bOnGround;
   bool bMoving;
   bool bTouched;
-  int iTouchCountDown;
+  uint8_t iTouchCountDown;
 
+
+  uint8_t  currentItemSelected;
+  uint8_t  quick_inventory[MAX_QUICK_ITEMS];
+
+  uint8_t  inventory[MAX_ITEMS];
 
   unsigned char state;
   unsigned char action, action_cooldown, action_perf;

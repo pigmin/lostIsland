@@ -15,6 +15,7 @@
         
         bool bIsActive;
         int bIsAlive;   //de 0 a 127 : zombi, apres 127 vivant
+        int iSpawning;
         int x;
         int y;
         int new_x;

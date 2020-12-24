@@ -15,9 +15,18 @@
 
 unsigned char *sp = NULL;
 unsigned char *_currentMusic = NULL;
-bool bMusicEnded = false;
+bool bMusicEnded = true;
+
+// Four mixers are needed to handle 8 channels of music
+AudioMixer4     mixer1;
+AudioMixer4     mixer2;
+
+AudioMixer4     mixerFX;
+AudioMixer4     mixerMOD;
+
 
 #define AMPLITUDE (0.2)
+#ifdef MIDI_MUSIC
 
 // Create 8 waveforms, one for each MIDI channel
 AudioSynthWaveform sine0, sine1, sine2, sine3;
@@ -60,12 +69,6 @@ AudioConnection patchCord06(sine5, env5);
 AudioConnection patchCord07(sine6, env6);
 AudioConnection patchCord08(sine7, env7);
 
-// Four mixers are needed to handle 8 channels of music
-AudioMixer4     mixer1;
-AudioMixer4     mixer2;
-
-AudioMixer4     mixerFX;
-
 // Mix the 8 channels down to 4 audio streams
 AudioConnection patchCord17(env0, 0, mixer1, 0);
 AudioConnection patchCord18(env1, 0, mixer1, 1);
@@ -76,6 +79,8 @@ AudioConnection patchCord21(env4, 0, mixer2, 0);
 AudioConnection patchCord22(env5, 0, mixer2, 1);
 AudioConnection patchCord23(env6, 0, mixer2, 2);
 AudioConnection patchCord24(env7, 0, mixer2, 3);
+
+#endif
 
 // Now create 2 mixers for the main output
 AudioMixer4     mixerLeft;
@@ -89,7 +94,6 @@ AudioPlayMemory sndPlayerCanal3;
 AudioConnection FX1(sndPlayerCanal1, 0, mixerFX, 0);
 AudioConnection FX2(sndPlayerCanal2, 0, mixerFX, 1);
 AudioConnection FX3(sndPlayerCanal3, 0, mixerFX, 2);
-
 
 // Mix all channels to both the outputs
 AudioConnection patchCord33(mixer1, 0, mixerLeft, 0);
@@ -122,16 +126,20 @@ void setupSoundManager()
   // Audio connections require memory to work.
   // The memory usage code indicates that 10 is the maximum
   // so give it 12 just to be sure.
-  AudioMemory(6);
+  AudioMemory(8);
  
   // reduce the gain on some channels, so half of the channels
   // are "positioned" to the left, half to the right, but all
   // are heard at least partially on both ears
-  mixerLeft.gain(1, 0.36);
-  mixerLeft.gain(3, 0.36);
-  mixerRight.gain(0, 0.36);
-  mixerRight.gain(2, 0.36);
+  mixer1.gain(0, 0.3);
+  mixer1.gain(1, 0.3);
 
+  mixerLeft.gain(1, 0.3);
+  mixerLeft.gain(3, 0.3);
+  mixerRight.gain(0, 0.3);
+  mixerRight.gain(2, 0.3);
+
+#ifdef MIDI_MUSIC
   // set envelope parameters, for pleasing sound :-)
   for (int i=0; i<8; i++) {
     envs[i]->attack(9.2);
@@ -145,7 +153,7 @@ void setupSoundManager()
     //envs[i]->decay(0.0);
     //envs[i]->release(0.0);
   }
-
+#endif
   Serial.println("setup done");
   
   // Initialize processor and memory measurements
@@ -164,6 +172,7 @@ void setupSoundManager()
 }
 
 void playMusic(const unsigned char *pMusic) {
+#ifdef MIDI_MUSIC
   bMusicEnded = true;
   if (pMusic[0] == 'P' && pMusic[1] == 't')
   {
@@ -173,22 +182,25 @@ void playMusic(const unsigned char *pMusic) {
   sp = (unsigned char*)pMusic;
   _currentMusic = (unsigned char*)pMusic;
   bMusicEnded = false;
+#endif
 }
 
 void stopMusic() {
+  #ifdef MIDI_MUSIC
   bMusicEnded = true;
   for (unsigned char chan=0; chan<8; chan++) {
       envs[chan]->noteOff();
       waves[chan]->amplitude(0);
     }
+  #endif
 }
 
-void updateSoundManager()
+void updateSoundManager(unsigned long now)
 {
+  #ifdef MIDI_MUSIC
   unsigned char c,opcode,chan;
   unsigned long d_time;
-  
-  unsigned now = millis();
+
   static unsigned long last_time = 0;
   static unsigned long pauseUntill = 0;
 
@@ -196,7 +208,8 @@ void updateSoundManager()
     return;
 
 // Change this to if(1) for measurement output every 5 seconds
-if(1) {
+#ifdef DEBUG
+ {
   if(millis() - last_time >= 5000) {
     Serial.print("Proc = ");
     Serial.print(AudioProcessorUsage());
@@ -210,6 +223,8 @@ if(1) {
     last_time = millis();
   }
 }
+#endif
+
   if (pauseUntill > 0 && now < pauseUntill)
     return;
 
@@ -233,13 +248,13 @@ if(1) {
   opcode = c & 0xF0;
   chan = c & 0x0F;
 
-  if (chan > 8)
+  if (chan >= 8)
     return;
   
   if(c < 0x80) {
     // Delay
     d_time = (c << 8) | *sp++;
-    pauseUntill = millis() + d_time;
+    pauseUntill = now + d_time;
     return;
   }
 
@@ -265,13 +280,16 @@ if(1) {
   if(opcode == CMD_PLAYNOTE) {
     unsigned char note = *sp++;
     unsigned char velocity = *sp++;
-    AudioNoInterrupts();
-      waves[chan]->begin(AMPLITUDE * velocity2amplitude[velocity-1],
-                         tune_frequencies2_PGM[note],
-                         wave_type[chan]);
-      envs[chan]->noteOn();
-    
-    AudioInterrupts();
+    if (note < 128 && velocity < 127)
+    {
+      AudioNoInterrupts();
+        waves[chan]->begin(AMPLITUDE * velocity2amplitude[velocity-1],
+                          tune_frequencies2_PGM[note],
+                          wave_type[chan]);
+        envs[chan]->noteOn();
+      
+      AudioInterrupts();
+    }
     return;
   }
 
@@ -280,4 +298,5 @@ if(1) {
     sp = _currentMusic;
     return;
   }
+  #endif
 }

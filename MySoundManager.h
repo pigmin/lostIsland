@@ -11,7 +11,7 @@ extern AudioPlayMemory sndPlayerCanal3;
 
 void setupSoundManager();
 void playMusic(const unsigned char *pMusic);
-void updateSoundManager();
+void updateSoundManager(unsigned long now);
 void stopMusic();
 
 // Table of midi note frequencies * 2

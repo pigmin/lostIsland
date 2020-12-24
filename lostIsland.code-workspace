@@ -53,7 +53,12 @@
 			"__functional_03": "cpp",
 			"*.tcc": "cpp",
 			"fstream": "cpp",
-			"ios": "cpp"
+			"ios": "cpp",
+			"viv_pic.c": "cpp",
+			"__locale": "cpp",
+			"__string": "cpp",
+			"memory_resource": "cpp",
+			"*.inc": "cpp"
 		}
 	}
 }

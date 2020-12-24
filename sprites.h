@@ -38,8 +38,6 @@
    #define PLAYER_FRAME_ACTION_2  1
    #define PLAYER_FRAME_ACTION_3  2
    #define PLAYER_FRAME_ACTION_4  3
-   #define PLAYER_FRAME_ACTION_5  4
-   #define PLAYER_FRAME_ACTION_6  5
 
    //Die
    #define PLAYER_FRAME_DIE_1   0
@@ -60,7 +58,7 @@
    const int PLAYER_FRAMERATE_FALLING = 1;
    const int PLAYER_FRAMERATE_WALK = 2;
    const int PLAYER_FRAMERATE_JUMP = 2;
-   const int PLAYER_FRAMERATE_ACTION = 4;
+   const int PLAYER_FRAMERATE_ACTION = 5;
    const int PLAYER_FRAMERATE_DIE = 1;
    const int PLAYER_FRAMERATE_TOUCH = 2;
    const int PLAYER_FRAMERATE_GROW = 2;

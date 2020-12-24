@@ -2,23 +2,28 @@
 #include <Adafruit_Arcada.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SPIFlash.h>
-#include <AsyncDelay.h>
+#include <Adafruit_ZeroTimer.h>
 
-#undef PIXEL_LIGHT
 #undef DEBUG
 //#include <FastLED.h>
 
 //#define NO_SOUND
-#define FPS int(1000 / 20)
-#define FPS_DIV2 int(FPS / 2)
-#define FPS_DIV4 int(FPS / 4)
+#define FPS 25
+
+uint8_t frameRate;
+uint16_t frameCount;
+uint8_t eachFrameMillis;
+long lastFrameStart;
+long nextFrameStart;
+bool post_render;
+uint8_t lastFrameDurationMs;
 
 // @todo passer en time based et non frame based
 // @todo idem pour les speed et anims frames des sprites...
-#define FRAMES_LOCK_ACTION_B int(300 / FPS)
-#define FRAMES_ANIM_ACTION_B int(500 / FPS)
-#define FRAMES_ACTION_B int(2000 / FPS)
-#define FRAMES_COOLDOWN_B int(1000 / FPS)
+#define FRAMES_LOCK_ACTION_B int(300 / (1000 / FPS))
+#define FRAMES_ANIM_ACTION_B int(550 / (1000 / FPS))
+#define FRAMES_ACTION_B int(2000 / (1000 / FPS))
+#define FRAMES_COOLDOWN_B int(1000 / (1000 / FPS))
 
 #define WORLD_WIDTH 200
 #define WORLD_HEIGHT 96
@@ -28,6 +33,9 @@
 
 #define MAX_DENSITE 8
 #define AMPLITUDE_DENSITE 16
+
+#define HUD_ITEMS_X 16
+#define HUD_ITEMS_Y ARCADA_TFT_HEIGHT - 18
 
 #define MAX_JUMP_PHASE 11
 
@@ -45,7 +53,13 @@
 
 #include "SimplexNoise.h"
 
-//#include "musics/bach_tocatta_fugue_d_minor.c"
+#include "musics/Astaroth_-_Title.c"
+#include "musics/PinballPalace.c"
+
+static const uint8_t PROGMEM pmf_aceman[]=
+{
+#include "musics/aceman.h"
+};
 
 #if !defined(USE_TINYUSB)
 #error("Please select TinyUSB for the USB stack!")
@@ -66,8 +80,6 @@
 #include "res/player_action2.c"
 #include "res/player_action3.c"
 #include "res/player_action4.c"
-#include "res/player_action5.c"
-#include "res/player_action6.c"
 
 #include "res/player_falling1.c"
 
@@ -95,6 +107,15 @@
 #include "res/rock_or.c"
 #include "res/rock_redstone.c"
 
+#include "res/argent_small.c"
+#include "res/charbon_small.c"
+#include "res/cuivre_small.c"
+#include "res/rock_small.c"
+#include "res/fer_small.c"
+#include "res/jade_small.c"
+#include "res/or_small.c"
+#include "res/redstone_small.c"
+
 #include "res/grass_left_8x8.c"
 #include "res/grass_middle_8x8.c"
 #include "res/grass_right_8x8.c"
@@ -116,12 +137,20 @@
 #include "sounds/Pioche.h"
 #include "sounds/RockBreaks.h"
 
+#include "pmf_player.h"
+
+
 extern Adafruit_SPIFlash Arcada_QSPI_Flash;
 
 Adafruit_Arcada arcada;
 uint16_t *framebuffer;
 GFXcanvas16 *canvas = NULL;
 int Swidth, Sheight;
+
+Adafruit_ZeroTimer zerotimer3 = Adafruit_ZeroTimer(3);
+
+static pmf_player s_player;
+static unsigned s_effect_channel=0;
 
 typedef enum TGameStates
 {
@@ -147,7 +176,8 @@ TGameStates gameState = STATE_MAIN_MENU;
 #define MAX_SPEED_X 4
 #define MAX_SPEED_Y 15
 
-#define JUMP_SPEED 11
+#define JUMP_SPEED 10
+#define DOUBLE_JUMP_SPEED   8
 
 Particles parts;
 
@@ -155,11 +185,13 @@ int briquesFRAMES = 0;
 
 int CURRENT_LEVEL = 1;
 
-int CURRENT_LEVEL_ENNEMIES = 0;
-int CURRENT_LEVEL_ITEMS = 0;
-int CURRENT_LEVEL_ZOMBIES = 0;
-int CURRENT_LEVEL_SPIDERS = 0;
-int CURRENT_LEVEL_SKELS = 0;
+int NB_WORLD_ENNEMIES = 0;
+int NB_WORLD_ITEMS = 0;
+int NB_WORLD_ZOMBIES = 0;
+int NB_WORLD_SPIDERS = 0;
+int NB_WORLD_SKELS = 0;
+
+int CURRENT_QUEUE_ITEMS = 0;
 
 int worldX = 0;
 int worldMIN_X = 0;
@@ -192,18 +224,16 @@ unsigned char WORLD_INFOS[WORLD_HEIGHT + 2][WORLD_WIDTH];
 
 unsigned char SCREEN_WORLD_OVERLAY[(ARCADA_TFT_WIDTH + 1) / 16][(ARCADA_TFT_HEIGHT + 1) / 16];
 
-AsyncDelay tick;
-
-void createItem(int wX, int wY, int type);
+void createItem(int wX, int wY, uint8_t type);
 void killItem(Titem *currentItem);
 void drawItems();
-void drawItems(Titem *currentItem);
+void drawItem(Titem *currentItem);
 void drawHud();
 
 void killEnnemy(Tennemy *currentEnnemy, int px, int py);
 void drawEnnemy(Tennemy *currentEnnemy);
 void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy);
-void updateEnnemiesIA();
+void updateEnnemyIA(Tennemy *currentEnnemy);
 
 void drawEnnemies();
 void drawTiles();
@@ -252,9 +282,134 @@ int count_player_touched = 0;
 int count_player_win = 0;
 
 bool bDoJump = false;
+bool bDoDoubleJump = false;
 bool bDoWalk = false;
 
 unsigned long prevDisplay = 0; // when the digital clock was displayed
+
+
+void PlayMOD(const void *pmf_file) {
+    s_player.load(pmf_file);
+    s_player.start(uint32_t(AUDIO_SAMPLE_RATE_EXACT+0.5f));
+  zerotimer3.enable(true);    
+}
+
+void StopMOD() {
+    s_player.stop();
+  zerotimer3.enable(false);    
+}
+void MOD_callback(void)
+{
+    AudioNoInterrupts();
+    s_player.update(); // keep updating the audio buffer...
+    AudioInterrupts();
+}
+
+void TC3_Handler()
+{
+  Adafruit_ZeroTimer::timerHandler(3);
+}
+
+void setup_timer3(float freq) {
+  uint8_t divider  = 1;
+  uint16_t compare = 1;
+
+  tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
+
+  if ((freq < 24000000) && (freq > 800)) {
+    divider = 1;
+    prescaler = TC_CLOCK_PRESCALER_DIV1;
+    compare = 48000000/freq;
+  } else if (freq > 400) {
+    divider = 2;
+    prescaler = TC_CLOCK_PRESCALER_DIV2;
+    compare = (48000000/2)/freq;
+  } else if (freq > 200) {
+    divider = 4;
+    prescaler = TC_CLOCK_PRESCALER_DIV4;
+    compare = (48000000/4)/freq;
+  } else if (freq > 100) {
+    divider = 8;
+    prescaler = TC_CLOCK_PRESCALER_DIV8;
+    compare = (48000000/8)/freq;
+  } else if (freq > 50) {
+    divider = 16;
+    prescaler = TC_CLOCK_PRESCALER_DIV16;
+    compare = (48000000/16)/freq;
+  } else if (freq > 12) {
+    divider = 64;
+    prescaler = TC_CLOCK_PRESCALER_DIV64;
+    compare = (48000000/64)/freq;
+  } else if (freq > 3) {
+    divider = 256;
+    prescaler = TC_CLOCK_PRESCALER_DIV256;
+    compare = (48000000/256)/freq;
+  } else if (freq >= 0.75) {
+    divider = 1024;
+    prescaler = TC_CLOCK_PRESCALER_DIV1024;
+    compare = (48000000/1024)/freq;
+  } else {
+    Serial.println("Invalid frequency");
+    while (1) delay(10);
+  }
+
+  zerotimer3.enable(false);
+  zerotimer3.configure(prescaler,       // prescaler
+          TC_COUNTER_SIZE_16BIT,       // bit width of timer/counter
+          TC_WAVE_GENERATION_MATCH_PWM // frequency or PWM mode
+          );
+
+  zerotimer3.setCompare(0, compare);
+  zerotimer3.setCallback(true, TC_CALLBACK_CC_CHANNEL0, MOD_callback);
+ // zerotimer3.enable(true);
+}
+
+void setFrameRate(uint8_t rate)
+{
+    frameRate = rate;
+    eachFrameMillis = 1000 / rate;
+}
+
+bool everyXFrames(uint8_t frames)
+{
+    return frameCount % frames == 0;
+}
+
+bool nextFrame()
+{
+    long now = millis();
+    uint8_t remaining;
+
+    // post render
+    if (post_render)
+    {
+        lastFrameDurationMs = now - lastFrameStart;
+        frameCount++;
+        post_render = false;
+    }
+
+    // if it's not time for the next frame yet
+    if (now < nextFrameStart)
+    {
+        remaining = nextFrameStart - now;
+        // if we have more than 1ms to spare, lets sleep
+        // we should be woken up by timer0 every 1ms, so this should be ok
+       //  if (remaining > 1)
+       //    nop();
+        return false;
+    }
+
+    // pre-render
+
+    // technically next frame should be last frame + each frame but if we're
+    // running a slow render we would constnatly be behind the clock
+    // keep an eye on this and see how it works.  If it works well the
+    // lastFrameStart variable could be eliminated completely
+    nextFrameStart = now + eachFrameMillis;
+    lastFrameStart = now;
+    post_render = true;
+    return post_render;
+}
 
 unsigned char getWorldAtPix(int px, int py)
 {
@@ -301,14 +456,6 @@ void setWorldAt(int x, int y, unsigned char val)
 
     if ((x > 0 && x < WORLD_WIDTH) && (y > 0 && y < WORLD_HEIGHT))
         WORLD[y][x] = val;
-}
-
-void spawnMushroom(int wX, int wY)
-{
-    int16_t sX = wX * 16;
-    int16_t sY = wY * 16;
-    // sndPlayerCanal2.play(AudioSampleSmb_powerup_appears);
-    createItem(wX, wY, ITEM_MUSHROOM);
 }
 
 void displayText(char *text, int16_t x, int16_t y, uint16_t color = ARCADA_WHITE, bool bCenter = false)
@@ -362,13 +509,13 @@ void setup()
 
     framebuffer = arcada.getFrameBuffer();
     canvas = arcada.getCanvas();
-
+    /*
     if (!arcada.filesysBeginMSD(ARCADA_FILESYS_QSPI))
     {
         Serial.println("Error, failed to initialize filesysBeginMSD!");
         arcada.haltBox("Failed to begin filesysBeginMSD");
     }
-
+*/
     Arcada_FilesystemType foundFS = arcada.filesysBegin();
     if (foundFS == ARCADA_FILESYS_NONE)
     {
@@ -393,8 +540,15 @@ void setup()
 
     initMenu();
 
-    tick.start(FPS, AsyncDelay::MILLIS);
+    setFrameRate(FPS);
 
+    stopMusic();
+    //playMusic(Pinball);
+
+    setup_timer3(100);
+    //arcada.timerCallback(100, MOD_callback);
+
+    PlayMOD(pmf_aceman);
     Serial.println("Starting");
 }
 
@@ -445,7 +599,7 @@ void initPlayer()
 
 void initGame()
 {
-    arcada.pixels.fill(0x00FF00);
+    arcada.pixels.fill(0x008800);
     //    arcada.pixels.setPixelColor(4, 0x00FF00);
     arcada.pixels.show();
     //arcada.display->setFont(ArialMT_Plain_10);
@@ -466,6 +620,7 @@ void initGame()
     jumpPhase = 0;
 
     bDoJump = false;
+    bDoDoubleJump = false;
     bDoWalk = false;
 
     Player.pos.speedX = 0;
@@ -594,7 +749,6 @@ void set_wining()
 
 void initWorld()
 {
-    stopMusic();
 
     //uint8_t zeNoise[WORLD_WIDTH];
     SimplexNoise noiseGen;
@@ -678,16 +832,16 @@ void initWorld()
         }
     }
 
-    CURRENT_LEVEL_ENNEMIES = 0;
+    NB_WORLD_ENNEMIES = 0;
     for (int wX = 1; wX < WORLD_WIDTH - 1; wX += 3)
     {
         for (int wY = 1; wY < WORLD_HEIGHT - 1; wY++)
         {
-            if (CURRENT_LEVEL_ENNEMIES < MAX_ENNEMIES)
+            if (NB_WORLD_ENNEMIES < MAX_ENNEMIES)
             {
                 int haut = WORLD[HEADER_ROW][wX];
                 int seed = random(100);
-                if (seed < 10 && CURRENT_LEVEL_SKELS < MAX_SKELS)
+                if (seed < 10 && NB_WORLD_SKELS < MAX_SKELS)
                 {
                     if (WORLD[HEADER_ROW][wX] == 0)
                     {
@@ -710,35 +864,35 @@ void initWorld()
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].bJumping = false;
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].bOnGround = false;
 */
-                        CURRENT_LEVEL_SKELS++;
+                        NB_WORLD_SKELS++;
                         //CURRENT_LEVEL_ENNEMIES++;
                     }
                 }
-                else if (seed < 33 && CURRENT_LEVEL_ZOMBIES < MAX_ZOMBIES)
+                else if (seed < 33 && NB_WORLD_ZOMBIES < MAX_ZOMBIES)
                 {
                     if (WORLD[wY][wX] == 0)
                     {
 
                         //Zombi
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bIsAlive = 255;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX = wX;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY = haut;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].x = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX * 16;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].y = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY * 16;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_x = 0;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_y = 0;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].type = ZOMBI_ENNEMY;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_x = ZOMBI_WALKING_SPEED;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_y = 0;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_frames = 4;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_anim = 3;
+                        ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
+                        ENNEMIES[NB_WORLD_ENNEMIES].worldX = wX;
+                        ENNEMIES[NB_WORLD_ENNEMIES].worldY = haut;
+                        ENNEMIES[NB_WORLD_ENNEMIES].x = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
+                        ENNEMIES[NB_WORLD_ENNEMIES].y = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
+                        ENNEMIES[NB_WORLD_ENNEMIES].new_x = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].new_y = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].type = ZOMBI_ENNEMY;
+                        ENNEMIES[NB_WORLD_ENNEMIES].speed_x = ZOMBI_WALKING_SPEED;
+                        ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 4;
+                        ENNEMIES[NB_WORLD_ENNEMIES].max_anim = 3;
 
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bFalling = false;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bJumping = false;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bOnGround = false;
+                        ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
+                        ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
+                        ENNEMIES[NB_WORLD_ENNEMIES].bOnGround = false;
 
-                        CURRENT_LEVEL_ENNEMIES++;
-                        CURRENT_LEVEL_ZOMBIES++;
+                        NB_WORLD_ENNEMIES++;
+                        NB_WORLD_ZOMBIES++;
                     }
                 }
                 else if (seed <= 50)
@@ -746,25 +900,25 @@ void initWorld()
                     if (WORLD[wY][wX] == 0x7f && WORLD[wY][wX + 1] == 0x7f && WORLD[wY][wX - 1] == 0x7f && WORLD[wY - 1][wX] == 0x7f)
                     {
                         //Spiders
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bIsAlive = 255;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX = wX;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY = wY;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].x = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX * 16;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].y = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY * 16;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_x = 0;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_y = 0;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].type = SPIDER_ENNEMY;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_x = SPIDER_WALKING_SPEED;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_y = 0;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_frames = 2;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_anim = 2;
+                        ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
+                        ENNEMIES[NB_WORLD_ENNEMIES].worldX = wX;
+                        ENNEMIES[NB_WORLD_ENNEMIES].worldY = wY;
+                        ENNEMIES[NB_WORLD_ENNEMIES].x = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
+                        ENNEMIES[NB_WORLD_ENNEMIES].y = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
+                        ENNEMIES[NB_WORLD_ENNEMIES].new_x = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].new_y = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].type = SPIDER_ENNEMY;
+                        ENNEMIES[NB_WORLD_ENNEMIES].speed_x = SPIDER_WALKING_SPEED;
+                        ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 2;
+                        ENNEMIES[NB_WORLD_ENNEMIES].max_anim = 2;
 
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bFalling = false;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bJumping = false;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bOnGround = false;
+                        ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
+                        ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
+                        ENNEMIES[NB_WORLD_ENNEMIES].bOnGround = false;
 
-                        CURRENT_LEVEL_ENNEMIES++;
-                        CURRENT_LEVEL_SPIDERS++;
+                        NB_WORLD_ENNEMIES++;
+                        NB_WORLD_SPIDERS++;
                     }
                 }
             }
@@ -775,10 +929,11 @@ void initWorld()
         }
     }
 
-    Serial.printf("CURRENT_LEVEL_ENNEMIES:%d\n", CURRENT_LEVEL_ENNEMIES);
+    Serial.printf("CURRENT_LEVEL_ENNEMIES:%d\n", NB_WORLD_ENNEMIES);
     Serial.printf("Min:%f / Max:%f\n", minN, maxN);
 
-    CURRENT_LEVEL_ITEMS = 0;
+    NB_WORLD_ITEMS = 0;
+    CURRENT_QUEUE_ITEMS = 0;
 #ifdef USE_WORLD_BACK
 
     memset(&WORLD_BACK, 0, BACKWORLD_HEIGHT * BACKWORLD_WIDTH);
@@ -852,8 +1007,8 @@ void initWorld()
         montI += (4 + random(6));
     }
 #endif
-
-    //   playMusic(bach_tocatta_fugue_d_minor);
+  //  StopMOD();
+  //  PlayMOD(pmf_ninja);
 }
 
 void drawPlayer()
@@ -918,31 +1073,36 @@ void drawPlayer()
     }
 }
 
-void createItem(int wX, int wY, int type)
+void createItem(int wX, int wY, uint8_t type)
 {
+    ITEMS[CURRENT_QUEUE_ITEMS].bIsAlive = 255;
+    ITEMS[CURRENT_QUEUE_ITEMS].bIsActive = true;
+    ITEMS[CURRENT_QUEUE_ITEMS].iSpawning = 1 * FPS;
 
-    if (CURRENT_LEVEL_ITEMS < MAX_ITEMS)
+    ITEMS[CURRENT_QUEUE_ITEMS].worldX = wX;
+    ITEMS[CURRENT_QUEUE_ITEMS].worldY = wY;
+    ITEMS[CURRENT_QUEUE_ITEMS].x = wX * 16;
+    ITEMS[CURRENT_QUEUE_ITEMS].y = wY * 16;
+    ITEMS[CURRENT_QUEUE_ITEMS].type = type;
+    ITEMS[CURRENT_QUEUE_ITEMS].speed_x = 0;
+    ITEMS[CURRENT_QUEUE_ITEMS].speed_y = 0;
+    ITEMS[CURRENT_QUEUE_ITEMS].max_frames = 1;
+    ITEMS[CURRENT_QUEUE_ITEMS].max_anim = 1;
+
+    CURRENT_QUEUE_ITEMS++;
+    //On boucle sur la liste des items
+    // @todo : faire une liste et trouver une "place dispo"
+    if (CURRENT_QUEUE_ITEMS == MAX_ITEMS)
     {
-        ITEMS[CURRENT_LEVEL_ITEMS].bIsAlive = 255;
-        ITEMS[CURRENT_LEVEL_ITEMS].bIsActive = false;
-        ITEMS[CURRENT_LEVEL_ITEMS].iSpawning = 1 * FPS;
-
-        ITEMS[CURRENT_LEVEL_ITEMS].worldX = wX;
-        ITEMS[CURRENT_LEVEL_ITEMS].worldY = wY;
-        ITEMS[CURRENT_LEVEL_ITEMS].x = wX * 16;
-        ITEMS[CURRENT_LEVEL_ITEMS].y = wY * 16;
-        ITEMS[CURRENT_LEVEL_ITEMS].type = type;
-        ITEMS[CURRENT_LEVEL_ITEMS].speed_x = 0;
-        ITEMS[CURRENT_LEVEL_ITEMS].speed_y = 0;
-        ITEMS[CURRENT_LEVEL_ITEMS].max_frames = 2;
-        ITEMS[CURRENT_LEVEL_ITEMS].max_anim = 2;
-
-        CURRENT_LEVEL_ITEMS++;
+        NB_WORLD_ITEMS = MAX_ITEMS;
+        CURRENT_QUEUE_ITEMS = 0;
+        ITEMS[CURRENT_QUEUE_ITEMS].bIsAlive = 0;
+        ITEMS[CURRENT_QUEUE_ITEMS].bIsActive = false;
+        ITEMS[CURRENT_QUEUE_ITEMS].type = ITEM_NONE;
     }
     else
-    {
-        Serial.println("Too many items.");
-    }
+        NB_WORLD_ITEMS++;
+
 }
 
 void killItem(Titem *currentItem, int px, int py)
@@ -963,7 +1123,7 @@ void drawItem(Titem *currentItem)
 
     if (currentItem->anim > currentItem->max_anim)
     {
-        currentItem->anim = 1;
+        currentItem->anim = 0;
     }
     if (currentItem->bIsAlive < 127)
     {
@@ -973,23 +1133,57 @@ void drawItem(Titem *currentItem)
 
     int px = currentItem->x - worldOffset_pX;
     int py = currentItem->y - worldOffset_pY;
-    //Recentrage
-    //px -= 4;
-    if (px < ARCADA_TFT_WIDTH && px > -16 && py < ARCADA_TFT_HEIGHT && py > -16)
-    {
+
+    /*
         /*    if (currentItem->iSpawning > 0)
     {
       int tmpH = 16 - (currentItem->iSpawning / 2);
       drawSprite(px, (currentItem->y ) + (16 - tmpH), mushroom_16x16.width, tmpH, mushroom_16x16.pixel_data, Player.pos.direction);
     }
     else
-      drawSprite(px, currentItem->y, mushroom_16x16.width, mushroom_16x16.height, mushroom_16x16.pixel_data, Player.pos.direction);*/
+
+    */
+    //Recentrage
+    //px -= 4;
+    const int8_t lookUpItems[7] = {0, 1, 2, 4, 4, 2, 1};
+    py = py - lookUpItems[(briquesFRAMES / 4) % 7];
+    //Serial.printf("Item:%d %d,%d\n", currentItem->type, px, py);
+    if (px < ARCADA_TFT_WIDTH && px > -16 && py < ARCADA_TFT_HEIGHT && py > -16)
+    {
+        switch (currentItem->type)
+        {
+        case ITEM_GROUND_ROCK:
+        case ITEM_ROCK:
+            drawSprite(px, py, rock_small.width, rock_small.height, rock_small.pixel_data, 1);
+            break;
+        case ITEM_CHARBON:
+            drawSprite(px, py, charbon_small.width, charbon_small.height, charbon_small.pixel_data, 1);
+            break;
+        case ITEM_CUIVRE:
+            drawSprite(px, py, cuivre_small.width, cuivre_small.height, cuivre_small.pixel_data, 1);
+            break;
+        case ITEM_FER:
+            drawSprite(px, py, fer_small.width, fer_small.height, fer_small.pixel_data, 1);
+            break;
+        case ITEM_ARGENT:
+            drawSprite(px, py, argent_small.width, argent_small.height, argent_small.pixel_data, 1);
+            break;
+        case ITEM_JADE:
+            drawSprite(px, py, jade_small.width, jade_small.height, jade_small.pixel_data, 1);
+            break;
+        case ITEM_OR:
+            drawSprite(px, py, or_small.width, or_small.height, or_small.pixel_data, 1);
+            break;
+        case ITEM_REDSTONE:
+            drawSprite(px, py, redstone_small.width, redstone_small.height, redstone_small.pixel_data, 1);
+            break;
+        }
     }
 }
 
 void drawItems()
 {
-    for (int enC = 0; enC < CURRENT_LEVEL_ITEMS; enC++)
+    for (int enC = 0; enC < NB_WORLD_ITEMS; enC++)
     {
         Titem *currentItem = &ITEMS[enC];
         if (currentItem->bIsAlive > 0)
@@ -1076,7 +1270,7 @@ void drawEnnemy(Tennemy *currentEnnemy)
 
 void drawEnnemies()
 {
-    for (int enC = 0; enC < CURRENT_LEVEL_ENNEMIES; enC++)
+    for (int enC = 0; enC < NB_WORLD_ENNEMIES; enC++)
     {
         Tennemy *currentEnnemy = &ENNEMIES[enC];
         if (currentEnnemy->bIsAlive > 0)
@@ -1097,15 +1291,11 @@ void drawTiles()
 
     int worldMIN_BACK = min(worldX_BACK, (BACKWORLD_WIDTH - 1) - (ARCADA_TFT_WIDTH / 8));
     int worldMAX_BACK = worldMIN_BACK + 1 + (ARCADA_TFT_WIDTH / 8);
-#ifdef PIXEL_LIGHT
-    int playerLightX = (Player.pos.pX + 8) - cameraX;
-    int playerLightY = (Player.pos.pY + 8) - cameraY;
-#else
     int playerLightX = Player.pos.worldX;
     int playerLightY = Player.pos.worldY;
 //    int playerLightX = (Player.pos.pX + 8) - cameraX;
 //    int playerLightY = (Player.pos.pY + 8) - cameraY;
-#endif
+
     /*    for (int wY = 0; wY < BACKWORLD_HEIGHT; wY++)
     {
         int py = wY * 8;
@@ -1163,28 +1353,7 @@ void drawTiles()
                     uint8_t value = WORLD[wY][wX];
 
                     int curLight = MAX_LIGHT_INTENSITY;
-#ifdef PIXEL_LIGHT
-                    int curLight_TL = MAX_LIGHT_INTENSITY;
-                    int curLight_BR = MAX_LIGHT_INTENSITY;
-                    if (profondeurColonne != 0)
-                    {
-                        int delta = (wY - profondeurColonne) + 1;
-                        if (delta > 0)
-                        {
-                            curLight_TL = curLight_TL / delta;
-                        }
 
-                        int delta2 = ((wY + 1) - profondeurColonne) + 1;
-                        if (delta2 > 0)
-                        {
-                            curLight_BR = curLight_BR / delta2;
-                        }
-                    }
-                    curLight_TL = curLight_TL + AMBIENT_LIGHT_INTENSITY;
-                    curLight_BR = curLight_BR + AMBIENT_LIGHT_INTENSITY;
-                    curLight_TL = min(curLight_TL, MAX_LIGHT_INTENSITY);
-                    curLight_BR = min(curLight_BR, MAX_LIGHT_INTENSITY);
-#else
                     if (profondeurColonne != 0)
                     {
                         int delta = (wY - profondeurColonne) + 1;
@@ -1205,72 +1374,12 @@ void drawTiles()
                     }
                     //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
                     curLight = min(curLight, MAX_LIGHT_INTENSITY);
-#endif
+
 #ifdef DEBUG
                     curLight = MAX_LIGHT_INTENSITY;
 #endif
 
-#ifdef PIXEL_LIGHT
-                    if (value == 0)
-                    {
-                        //rien le fond
-                    }
-                    else if (value == BLOCK_UNDERGROUND_AIR)
-                    {
-                        //background de terrassement
-                        drawTile2(px, py, back_ground.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                        // fond du sous terrain : drawSprite(px, py, ground_top.width, ground_top.height, ground_top.pixel_data, 1, curLight);
-                    }
-                    else if (value == BLOCK_GROUND_TOP) //
-                    {
-                        drawTile2(px, py, ground_top.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_GROUND) //
-                    {
-                        drawTile2(px, py, ground.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_GROUND_ROCK) //
-                    {
-                        drawTile2(px, py, rock_empty.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_ROCK) //
-                    {
-                        drawTile2(px, py, rock_empty.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_CHARBON) //
-                    {
-                        drawTile2(px, py, rock_charbon.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_CUIVRE) //
-                    {
-                        drawTile2(px, py, rock_cuivre.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_FER) //
-                    {
-                        drawTile2(px, py, rock_fer.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_ARGENT) //
-                    {
-                        drawTile2(px, py, rock_argent.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_JADE) //
-                    {
-                        drawTile2(px, py, rock_jade.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_OR) //
-                    {
-                        drawTile2(px, py, rock_or.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-                    else if (value == BLOCK_REDSTONE) //
-                    {
-                        drawTile2(px, py, rock_redstone.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
 
-                    else
-                    {
-                        drawTile2(px, py, rock_empty.pixel_data, curLight_TL, curLight_BR, playerLightX, playerLightY);
-                    }
-#else
                     if (value == 0)
                     {
                         //rien le fond
@@ -1377,7 +1486,7 @@ void drawTiles()
                         }
                         drawSprite(px, py, coin4_8x8.width, coin4_8x8.height, (const unsigned char *)bitmap, 1);
                     }*/
-#endif
+
                 }
             }
         }
@@ -1455,7 +1564,7 @@ void debugInfos()
 
     //   canvas->drawRect((Player.pos.pX - (worldMIN_X * 16)) - currentOffset_X, (Player.pos.pY - (worldMIN_Y * 16)) - currentOffset_Y, 16, 16, ARCADA_BLUE);
 
-    for (int enC = 0; enC < CURRENT_LEVEL_ENNEMIES; enC++)
+    for (int enC = 0; enC < NB_WORLD_ENNEMIES; enC++)
     {
         Tennemy *currentEnnemy = &ENNEMIES[enC];
         if (currentEnnemy->bIsAlive > 0)
@@ -1474,12 +1583,13 @@ void debugInfos()
 
 void drawHud()
 {
+    // @todo : pas vraiment ici que ce devrait etre fait...
     if (counterActionB > 0)
     {
         if (Player.cible_pX > -16 && Player.cible_pX < ARCADA_TFT_WIDTH && Player.cible_pY > -16 && Player.cible_pY < ARCADA_TFT_HEIGHT)
         {
             //Test action pour le sprite, pour l'instant la pioche
-            drawSprite(Player.cible_pX, Player.cible_pY, pioche.width, pioche.height, pioche.pixel_data, Player.pos.direction);
+            // drawSprite(Player.cible_pX, Player.cible_pY, pioche.width, pioche.height, pioche.pixel_data, Player.pos.direction);
             if ((counterActionB % FRAMES_ANIM_ACTION_B) == 0)
             {
                 parts.createExplosion(Player.cible_pX + 8, Player.cible_pY + 8, 8); //@todo colorer avec la couleur de la brique en cours de travail
@@ -1487,6 +1597,22 @@ void drawHud()
             }
         }
     }
+
+    //Quick items
+    for (uint8_t it = 0; it < MAX_QUICK_ITEMS; it++)
+    {
+        if (it == Player.currentItemSelected)
+            canvas->drawRect(HUD_ITEMS_X + (it * 16), HUD_ITEMS_Y, 16, 16, ARCADA_MAGENTA);
+        else
+            canvas->drawRect(HUD_ITEMS_X + (it * 16), HUD_ITEMS_Y, 16, 16, ARCADA_WHITE);
+        uint8_t item_id = Player.quick_inventory[it];
+        if (item_id != 0)
+        {
+            ///draw Item sprite
+        }
+    }
+
+    //Health / Magie...
 }
 
 void drawWorld()
@@ -1494,6 +1620,7 @@ void drawWorld()
     drawTiles();
 
     drawEnnemies();
+
     drawItems();
 
     drawPlayer();
@@ -1616,7 +1743,7 @@ void checkPlayerState()
     }
 
     //Collisions mushrooms
-    for (int itC = 0; itC < CURRENT_LEVEL_ITEMS; itC++)
+    for (int itC = 0; itC < NB_WORLD_ITEMS; itC++)
     {
         Titem *currentItem = &ITEMS[itC];
         if ((currentItem->bIsAlive > 127) && currentItem->bIsActive)
@@ -1647,7 +1774,7 @@ void checkPlayerState()
 
     bool bRebond = false;
     //Collisions ennemis
-    for (int enC = 0; enC < CURRENT_LEVEL_ENNEMIES; enC++)
+    for (int enC = 0; enC < NB_WORLD_ENNEMIES; enC++)
     {
         Tennemy *currentEnnemy = &ENNEMIES[enC];
         if (currentEnnemy->bIsAlive > 127)
@@ -1803,56 +1930,60 @@ void computePlayerAnimations()
 
 void updateEnnemies()
 {
-    updateEnnemiesIA();
 
-    for (int enC = 0; enC < CURRENT_LEVEL_ENNEMIES; enC++)
+    for (int enC = 0; enC < NB_WORLD_ENNEMIES; enC++)
     {
         Tennemy *currentEnnemy = &ENNEMIES[enC];
         if (currentEnnemy->bIsAlive > 127)
         {
-            //Update velocities
-            //Gravity
-            currentEnnemy->speed_y = currentEnnemy->speed_y + FALLING_SPEED;
+            updateEnnemyIA(currentEnnemy);
 
-            //Frotements
-            /* if (currentEnnemy->bOnGround)
+            if (currentEnnemy->bIsActive)
             {
+                //Update velocities
+                //Gravity
+                currentEnnemy->speed_y = currentEnnemy->speed_y + FALLING_SPEED;
+
+                //Frotements
+                /* if (currentEnnemy->bOnGround)
+                {
+                    if (currentEnnemy->speed_x > 0)
+                        currentEnnemy->speed_x--;
+                    else if (currentEnnemy->speed_x < 0)
+                        currentEnnemy->speed_x++;
+                }*/
+
+                if (currentEnnemy->speed_x > MAX_SPEED_X)
+                    currentEnnemy->speed_x = MAX_SPEED_X;
+                else if (currentEnnemy->speed_x < -MAX_SPEED_X)
+                    currentEnnemy->speed_x = -MAX_SPEED_X;
+
+                if (currentEnnemy->speed_y > MAX_SPEED_Y)
+                    currentEnnemy->speed_y = MAX_SPEED_Y;
+                else if (currentEnnemy->speed_y < -MAX_SPEED_Y)
+                    currentEnnemy->speed_y = -MAX_SPEED_Y;
+
+                //update pos
                 if (currentEnnemy->speed_x > 0)
-                    currentEnnemy->speed_x--;
+                {
+                    currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
+                    currentEnnemy->bMoving = true;
+
+                    currentEnnemy->new_x = min(((WORLD_WIDTH - 1) * 16), currentEnnemy->new_x);
+                }
                 else if (currentEnnemy->speed_x < 0)
-                    currentEnnemy->speed_x++;
-            }*/
+                {
+                    currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
+                    currentEnnemy->bMoving = true;
 
-            if (currentEnnemy->speed_x > MAX_SPEED_X)
-                currentEnnemy->speed_x = MAX_SPEED_X;
-            else if (currentEnnemy->speed_x < -MAX_SPEED_X)
-                currentEnnemy->speed_x = -MAX_SPEED_X;
+                    currentEnnemy->new_x = max(0, currentEnnemy->new_x);
+                }
 
-            if (currentEnnemy->speed_y > MAX_SPEED_Y)
-                currentEnnemy->speed_y = MAX_SPEED_Y;
-            else if (currentEnnemy->speed_y < -MAX_SPEED_Y)
-                currentEnnemy->speed_y = -MAX_SPEED_Y;
+                currentEnnemy->new_y = currentEnnemy->y + currentEnnemy->speed_y;
 
-            //update pos
-            if (currentEnnemy->speed_x > 0)
-            {
-                currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
-                currentEnnemy->bMoving = true;
-
-                currentEnnemy->new_x = min(((WORLD_WIDTH - 1) * 16), currentEnnemy->new_x);
+                //collisions
+                checkEnnemyCollisionsWorld(currentEnnemy);
             }
-            else if (currentEnnemy->speed_x < 0)
-            {
-                currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
-                currentEnnemy->bMoving = true;
-
-                currentEnnemy->new_x = max(0, currentEnnemy->new_x);
-            }
-
-            currentEnnemy->new_y = currentEnnemy->y + currentEnnemy->speed_y;
-
-            //collisions
-            checkEnnemyCollisionsWorld(currentEnnemy);
         }
     }
 }
@@ -1900,7 +2031,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     }
     else
     {
-        Player.bFalling = true;
+        currentEnnemy->bFalling = true;
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         uint8_t tileBL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y + 16);
         uint8_t tileBR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y + 16);
@@ -1920,70 +2051,68 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     currentEnnemy->worldY = currentEnnemy->y / 16;
 }
 
-void updateEnnemiesIA()
+void updateEnnemyIA(Tennemy *currentEnnemy)
 {
-    for (int enC = 0; enC < CURRENT_LEVEL_ENNEMIES; enC++)
+    if (currentEnnemy->bIsAlive > 127)
     {
-        Tennemy *currentEnnemy = &ENNEMIES[enC];
-        if (currentEnnemy->bIsAlive > 127)
+        //Si ennemi trop loin on ne fait pas
+        int distX = abs(currentEnnemy->worldX - Player.pos.worldX);
+        int distY = abs(currentEnnemy->worldY - Player.pos.worldY);
+        //if ((currentEnnemy->worldX >= 1) && (currentEnnemy->worldX <= worldMAX_X))
+        if ((distX < 30) && (distY < 20))
         {
-            //if ((currentEnnemy->worldX >= 1) && (currentEnnemy->worldX <= worldMAX_X))
+            currentEnnemy->bIsActive = true;
+            //Deplacement
+            if (currentEnnemy->type == SPIDER_ENNEMY)
             {
-                currentEnnemy->bIsActive = true;
-                //Deplacement
-                if (currentEnnemy->type == SPIDER_ENNEMY)
+                if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
+                    currentEnnemy->speed_x = SPIDER_WALKING_SPEED;
+                else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
+                    currentEnnemy->speed_x = -SPIDER_WALKING_SPEED;
+
+                if (distY <= 2)
                 {
-                    if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
+                    int dist = currentEnnemy->worldX - Player.pos.worldX;
+                    if (dist < 0 && dist > -5)
+                    {
                         currentEnnemy->speed_x = SPIDER_WALKING_SPEED;
-                    else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
+                    }
+                    else if (dist > 0 && dist < 5)
+                    {
                         currentEnnemy->speed_x = -SPIDER_WALKING_SPEED;
-
-                    int distY = abs(currentEnnemy->worldY - Player.pos.worldY);
-
-                    if (distY <= 2)
-                    {
-                        int dist = currentEnnemy->worldX - Player.pos.worldX;
-                        if (dist < 0 && dist > -5)
-                        {
-                            currentEnnemy->speed_x = SPIDER_WALKING_SPEED;
-                        }
-                        else if (dist > 0 && dist < 5)
-                        {
-                            currentEnnemy->speed_x = -SPIDER_WALKING_SPEED;
-                        }
                     }
                 }
-                else if (currentEnnemy->type == ZOMBI_ENNEMY)
-                {
-                    if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
-                        currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
-                    else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
-                        currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
-
-                    if (currentEnnemy->worldY == Player.pos.worldY)
-                    {
-                        int dist = currentEnnemy->worldX - Player.pos.worldX;
-                        if (dist < 0 && dist > -5)
-                        {
-                            currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
-                        }
-                        else if (dist > 0 && dist < 5)
-                        {
-                            currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
-                        }
-                    }
-                }
-                //speed x et speed y (jump)
             }
-            //else
-            //   currentEnnemy->bIsActive = false;
+            else if (currentEnnemy->type == ZOMBI_ENNEMY)
+            {
+                if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
+                    currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
+                else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
+                    currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
+
+                if (currentEnnemy->worldY == Player.pos.worldY)
+                {
+                    int dist = currentEnnemy->worldX - Player.pos.worldX;
+                    if (dist < 0 && dist > -5)
+                    {
+                        currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
+                    }
+                    else if (dist > 0 && dist < 5)
+                    {
+                        currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
+                    }
+                }
+            }
+            //speed x et speed y (jump)
         }
+        else
+            currentEnnemy->bIsActive = false;
     }
 }
 
 void updateItems()
 {
-    for (int enC = 0; enC < CURRENT_LEVEL_ITEMS; enC++)
+    for (int enC = 0; enC < NB_WORLD_ITEMS; enC++)
     {
         Titem *currentItem = &ITEMS[enC];
         if (currentItem->bIsAlive > 127)
@@ -1998,41 +2127,66 @@ void updateItems()
             //if ((currentItem->worldX >= worldMIN_X) && (currentItem->worldX <= worldMAX_X))
             if (currentItem->bIsActive)
             {
+                //Update velocities
+                //Gravity
+                currentItem->speed_y = currentItem->speed_y + FALLING_SPEED;
 
-                //Deplacement
-                int newX = currentItem->x + currentItem->speed_x;
-                int posXItemInWorld = newX / 16;
-                int posYItemInWorld = currentItem->y / 16;
+                if (currentItem->speed_y > MAX_SPEED_Y)
+                    currentItem->speed_y = MAX_SPEED_Y;
+                else if (currentItem->speed_y < -MAX_SPEED_Y)
+                    currentItem->speed_y = -MAX_SPEED_Y;
 
-                //Deux briques SUR player
-                int brique_ITEM = getWorldAt(currentItem->x / 16, posYItemInWorld);
-                int brique_ITEM_DOWN = getWorldAt(posXItemInWorld, posYItemInWorld + 1);
-                int brique_ITEM_FRONT = getWorldAt(posXItemInWorld, posYItemInWorld);
+                //update pos
+                currentItem->new_y = currentItem->y + currentItem->speed_y;
 
-                if (brique_ITEM_DOWN <= 'Z')
-                {
-                    currentItem->y = posYItemInWorld * 16;
-                }
-                else
-                {
-                    currentItem->y = currentItem->y + FALLING_SPEED;
-                }
-
-                if ((brique_ITEM_FRONT <= 'Z'))
-                {
-                    currentItem->speed_x = -currentItem->speed_x;
-                }
-                else
-                {
-                    currentItem->x = newX;
-                    currentItem->worldX = posXItemInWorld;
-                    currentItem->worldY = posYItemInWorld;
-                }
+                //collisions
+                checkItemCollisionsWorld(currentItem);
             }
+
             // else
             // currentItem->bIsActive = false;
         }
     }
+}
+void checkItemCollisionsWorld(Titem *currentItem)
+{
+    //Y
+    currentItem->bOnGround = false;
+    currentItem->bJumping = false;
+    if (currentItem->speed_y <= 0)
+    {
+        //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
+        uint8_t tileTL = getWorldAtPix(currentItem->x + 0, currentItem->new_y);
+        uint8_t tileTR = getWorldAtPix(currentItem->x + 15, currentItem->new_y);
+        if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR))
+        {
+            currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16)) + 16;
+            currentItem->speed_y = 0;
+        }
+        else
+        {
+            currentItem->bJumping = true;
+        }
+    }
+    else
+    {
+        currentItem->bFalling = true;
+        //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
+        uint8_t tileBL = getWorldAtPix(currentItem->x + 0, currentItem->new_y + 16);
+        uint8_t tileBR = getWorldAtPix(currentItem->x + 15, currentItem->new_y + 16);
+        if ((tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
+        {
+            currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16));
+            currentItem->bOnGround = true;
+            currentItem->bFalling = false;
+            currentItem->speed_y = 0;
+        }
+    }
+
+    currentItem->y = currentItem->new_y;
+
+    currentItem->worldX = currentItem->x / 16;
+    currentItem->worldY = currentItem->y / 16;
 }
 
 void updatePlayerVelocities()
@@ -2137,6 +2291,8 @@ void checkPlayerCollisionsWorld()
             Player.bOnGround = true;
             Player.bFalling = false;
             Player.pos.speedY = 0;
+            bDoJump = false;
+            bDoDoubleJump = false;
         }
     }
 
@@ -2150,13 +2306,10 @@ void checkPlayerInputs()
 
     if (just_pressed & ARCADA_BUTTONMASK_SELECT)
     {
-        //
-        if (gameState == STATE_PAUSE_MENU)
-            gameState = STATE_PLAYING;
-        else if (gameState == STATE_PLAYING)
-        {
-            gameState = STATE_PAUSE_MENU;
-        }
+        //changement inventaire rapide
+        Player.currentItemSelected++;
+        if (Player.currentItemSelected == MAX_QUICK_ITEMS)
+            Player.currentItemSelected = 0;
     }
     else if (just_pressed & ARCADA_BUTTONMASK_START)
     {
@@ -2237,8 +2390,11 @@ void checkPlayerInputs()
             value = getWorldAt(Player.cible_wX, Player.cible_wY);
 
             //Serial.printf("Dig:%d,%d v:%d\n", Player.cible_wX, Player.cible_wY, value);
-            if (value != 0 && value != BLOCK_UNDERGROUND_AIR && Player.pos.YDown < (WORLD_HEIGHT - 1))
+            if (value != BLOCK_AIR && value != BLOCK_UNDERGROUND_AIR && Player.pos.YDown < (WORLD_HEIGHT - 1))
             {
+                // @todo span item ramassable ? ou tile ramassable ?
+                createItem(Player.cible_wX, Player.cible_wY, value);
+
                 if (value < BLOCK_ROCK)
                     value = BLOCK_AIR;
                 else
@@ -2247,7 +2403,6 @@ void checkPlayerInputs()
                 // @todo : tester le type de value
                 sndPlayerCanal1.play(AudioSampleRock_break);
                 parts.createExplosion(Player.cible_pX + 8, Player.cible_pY + 8, 12); //@todo colorer avec la couleur de la brique en cours de travail
-                // @todo span item ramassable ? ou tile ramassable ?
 
                 setWorldAt(Player.cible_wX, Player.cible_wY, value);
                 updateHauteurColonne(Player.cible_wX, Player.cible_wY);
@@ -2275,6 +2430,14 @@ void checkPlayerInputs()
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
                 Player.pos.speedY = -JUMP_SPEED;
+            }
+            else if (!bDoDoubleJump && !Player.bOnGround && Player.pos.speedY < FALLING_SPEED)
+            {
+                // @todo spawn dust double jump
+                bDoDoubleJump = true;
+                sndPlayerCanal1.play(AudioSample__Jump);
+                //Thrust
+                Player.pos.speedY = -DOUBLE_JUMP_SPEED;
             }
         }
 
@@ -2402,7 +2565,7 @@ void displayGameMenu()
                 if (SaveGame(ret + 1))
                 {
                     arcada.infoBox("Sauvegarde OK.", ARCADA_BUTTONMASK_A);
-                    ret = 255;                    
+                    ret = 255;
                 }
                 else
                     arcada.errorBox("Erreur !", ARCADA_BUTTONMASK_A);
@@ -2702,39 +2865,40 @@ void readInputs()
 
 void loop()
 {
-    uint32_t startTime, elapsedTime;
+    long elapsedTime;
 
-    if (tick.isExpired())
+    //long now = millis();
+    //updateSoundManager(now);
+
+    if (!nextFrame())
+        return;
+
+    readInputs();
+    if (gameState == STATE_MAIN_MENU)
     {
-        startTime = millis();
-
-        readInputs();
-        if (gameState == STATE_MAIN_MENU)
-        {
-            updateMainMenu();
-            displayMainMenu();
-        }
-        else if (gameState == STATE_PLAYING)
-        {
-            updateGame();
-            displayGame();
-        }
-        else if (gameState == STATE_PAUSE_MENU)
-        {
-            updatePauseMenu();
-            displayPauseMenu();
-        }
-        else if (gameState == STATE_GAME_MENU)
-        {
-            updateGameMenu();
-            displayGameMenu();
-        }
-        elapsedTime = millis() - startTime;
-
-        //Serial.printf("E:%d\n", elapsedTime);
-        tick.repeat();
+        updateMainMenu();
+        displayMainMenu();
     }
-    updateSoundManager();
+    else if (gameState == STATE_PLAYING)
+    {
+        updateGame();
+        displayGame();
+    }
+    else if (gameState == STATE_PAUSE_MENU)
+    {
+        updatePauseMenu();
+        displayPauseMenu();
+    }
+    else if (gameState == STATE_GAME_MENU)
+    {
+        updateGameMenu();
+        displayGameMenu();
+    }
+
+    //elapsedTime = millis() - now;
+
+    //Serial.printf("E:%d LFD:%d\n", elapsedTime, lastFrameDurationMs);
+
 }
 
 void anim_player_idle()
@@ -2774,7 +2938,7 @@ void anim_player_digging()
     }
     Player.current_framerate++;
 
-    if (Player.anim > PLAYER_FRAME_ACTION_6)
+    if (Player.anim > PLAYER_FRAME_ACTION_4)
     {
         Player.anim = PLAYER_FRAME_ACTION_1;
     }
@@ -2793,12 +2957,6 @@ void anim_player_digging()
         break;
     case PLAYER_FRAME_ACTION_4:
         drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action4.width, player_action4.height, player_action4.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_ACTION_5:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action5.width, player_action5.height, player_action5.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_ACTION_6:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action6.width, player_action6.height, player_action6.pixel_data, Player.pos.direction);
         break;
     }
 }
