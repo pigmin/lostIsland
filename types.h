@@ -101,10 +101,19 @@ typedef struct Enemy
   unsigned char level;
 } Enemy;
 
+#define  BLOCK_LIFE_NA     0  //Aucune ou infinie
+#define  BLOCK_LIFE_1     1
+#define  BLOCK_LIFE_2     2
+#define  BLOCK_LIFE_3     3
+#define  BLOCK_LIFE_4     4
+#define  BLOCK_LIFE_5     5
+#define  BLOCK_LIFE_6     6
+#define  BLOCK_LIFE_7     7
+
 
 typedef union {
 
-  uint16_t rawTile;
+  uint16_t RAW;
   
   struct {
       uint8_t id;
@@ -112,11 +121,12 @@ typedef union {
         struct {
           uint8_t traversable:1;
           uint8_t opaque:1;
+          //uint8_t underground:1; //pour le moment on stocke le underground par rapport a la hauteur originelle..a voir..
           //uint8_t animated:1;
           uint8_t life:3;
           uint8_t _spare:3;
-        } fields;
-        uint8_t raw;
+        };
+        uint8_t RAW;
       } attr;
       
   };

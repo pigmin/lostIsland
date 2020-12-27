@@ -214,7 +214,7 @@ TworldTile WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
 
 unsigned char SCREEN_WORLD_OVERLAY[(ARCADA_TFT_WIDTH + 1) / 16][(ARCADA_TFT_HEIGHT + 1) / 16];
 
-void createItem(int wX, int wY, uint8_t type);
+void createDropFrom(int wX, int wY, uint8_t type);
 void killItem(Titem *currentItem);
 void drawItems();
 void drawItem(Titem *currentItem);
@@ -432,13 +432,14 @@ TworldTile getWorldAtPix(int px, int py)
     return res;
 }
 
+//On sauvegarde la hauteur courante dans l'entete de notre colonne de WORLD
 void updateHauteurColonne(int x, int y)
 {
     //on  cherche la nouvelle hauteur
     int newH = 0;
     for (int wY = 0; wY < WORLD_HEIGHT; wY++)
     {
-        if (WORLD[wY][x].id != 0)
+        if (!WORLD[wY][x].attr.traversable)
         {
             newH = wY;
             break;
@@ -796,15 +797,35 @@ void initWorld()
         for (int wY = 0; wY < WORLD_HEIGHT; wY++)
         {
             if (wY > (rowGround + 7))
+            {
                 WORLD[wY][wX].id = BLOCK_ROCK;
+                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
+                WORLD[wY][wX].attr.traversable = 0;
+            }
             else if (wY > (rowGround + 3))
+            {
                 WORLD[wY][wX].id = BLOCK_GROUND_ROCK;
+                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
+                WORLD[wY][wX].attr.traversable = 0;
+            }
             else if (wY > rowGround)
+            {
                 WORLD[wY][wX].id = BLOCK_GROUND;
+                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
+                WORLD[wY][wX].attr.traversable = 0;
+            }
             else if (wY == rowGround)
+            {
                 WORLD[wY][wX].id = BLOCK_GROUND_TOP;
+                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
+                WORLD[wY][wX].attr.traversable = 0;
+            }
             else
-                WORLD[wY][wX].id = 0;
+            {
+                WORLD[wY][wX].id = BLOCK_AIR;
+                WORLD[wY][wX].attr.traversable = 1;
+                WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
+            }
         }
     }
     float minN = 999999;
@@ -823,14 +844,26 @@ void initWorld()
             if (WORLD[wY][wX].id <= BLOCK_GROUND_ROCK)
             {
                 if (densite > MAX_DENSITE)
+                {
                     WORLD[wY][wX].id = BLOCK_AIR;
+                    WORLD[wY][wX].attr.traversable = 1;
+                    WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
+                }
             }
             else
             {
                 if (abs(densite) > MAX_DENSITE || densite == 0)
+                {
                     WORLD[wY][wX].id = BLOCK_UNDERGROUND_AIR;
+                    WORLD[wY][wX].attr.traversable = 1;
+                    WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
+                }
                 else
+                {
                     WORLD[wY][wX].id = abs(densite) + BLOCK_ROCK;
+                    WORLD[wY][wX].attr.traversable = 0;
+                    WORLD[wY][wX].attr.life = int(max(densite / 2, BLOCK_LIFE_7));
+                }
             }
 
             if (noise < minN)
@@ -843,15 +876,23 @@ void initWorld()
     {
         for (int wY = 0; wY < WORLD_HEIGHT; wY++)
         {
-            if ((WORLD[wY][wX].id != 0) && (WORLD[wY][wX].id != BLOCK_UNDERGROUND_AIR))
+            if (!WORLD[wY][wX].attr.traversable)
             {
+                //Sauvegarde de la hauteur courante et de la hauteur originelle
                 WORLD[HEADER_ROW][wX].id = wY;
                 WORLD[REF_ROW][wX].id = wY;
 
                 WORLD[wY][wX].id = BLOCK_GROUND_TOP;
-                if (wY + 1 < (WORLD_HEIGHT - 1))
-                    WORLD[wY + 1][wX].id = BLOCK_GROUND;
+                WORLD[wY][wX].attr.traversable = 0;
+                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
 
+                //Si possible on change la tile juste en dessous pour du ground
+                if (wY + 1 < (WORLD_HEIGHT - 1))
+                {
+                    WORLD[wY + 1][wX].id = BLOCK_GROUND;
+                    WORLD[wY + 1][wX].attr.traversable = 0;
+                    WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
+                }
                 break;
             }
         }
@@ -864,17 +905,17 @@ void initWorld()
         {
             if (NB_WORLD_ENNEMIES < MAX_ENNEMIES)
             {
-                int haut = WORLD[HEADER_ROW][wX].id;
+                int hauteur = WORLD[HEADER_ROW][wX].id;
                 int seed = random(100);
                 if (seed < 10 && NB_WORLD_SKELS < MAX_SKELS)
                 {
-                    if (WORLD[HEADER_ROW][wX].id == 0)
+                    if (WORLD[HEADER_ROW][wX].attr.traversable)
                     {
                         /*
                         //Zombi
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].bIsAlive = 255;
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX = wX;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY = haut;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY = hauteur - 1;
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].x = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX * 16;
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].y = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY * 16;
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_x = 0;
@@ -898,13 +939,13 @@ void initWorld()
                 }
                 else if (seed < 33 && NB_WORLD_ZOMBIES < MAX_ZOMBIES)
                 {
-                    if (WORLD[wY][wX].id == 0)
+                    if (WORLD[wY][wX].attr.traversable)
                     {
 
                         //Zombi
                         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
                         ENNEMIES[NB_WORLD_ENNEMIES].worldX = wX;
-                        ENNEMIES[NB_WORLD_ENNEMIES].worldY = haut;
+                        ENNEMIES[NB_WORLD_ENNEMIES].worldY = hauteur - 1;
                         ENNEMIES[NB_WORLD_ENNEMIES].x = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
                         ENNEMIES[NB_WORLD_ENNEMIES].y = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
                         ENNEMIES[NB_WORLD_ENNEMIES].new_x = 0;
@@ -926,9 +967,9 @@ void initWorld()
                         NB_WORLD_ZOMBIES++;
                     }
                 }
-                else if (seed <= 50)
+                else if ((seed <= 50) && (wY > hauteur))
                 {
-                    if (WORLD[wY][wX].id == 0x7f && WORLD[wY][wX + 1].id == 0x7f && WORLD[wY][wX - 1].id == 0x7f && WORLD[wY - 1][wX].id == 0x7f)
+                    if (WORLD[wY][wX].attr.traversable && WORLD[wY][wX + 1].attr.traversable && WORLD[wY][wX - 1].attr.traversable && WORLD[wY - 1][wX].attr.traversable)
                     {
                         //Spiders
                         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
@@ -1047,7 +1088,7 @@ void drawPlayer()
     }
 }
 
-void createItem(int wX, int wY, uint8_t type)
+void createDropFrom(int wX, int wY, uint8_t type)
 {
     ITEMS[CURRENT_QUEUE_ITEMS].bIsAlive = 255;
     ITEMS[CURRENT_QUEUE_ITEMS].bIsActive = true;
@@ -1286,33 +1327,34 @@ void drawTiles()
                     uint8_t value = WORLD[wY][wX].id;
 
                     int curLight = MAX_LIGHT_INTENSITY;
-
-                    if (profondeurColonne != 0)
+                    if (value != BLOCK_AIR)
                     {
-                        int delta = (wY - profondeurColonne) + 1;
-                        if (delta > 0)
-                            curLight = curLight / delta;
-                    }
-                    // @todo : creer un masque de X*X autour du player pour "ajouter de la light"
-                    if (wY <= (playerLightY + 1) || value == 0 || value == 0x7F)
-                    {
-                        //Ray cast du player vers decor ?
-                        float distPlayer = sqrt((playerLightX - wX) * (playerLightX - wX) + (playerLightY - wY) * (playerLightY - wY));
-                        //Serial.printf("player:%d,%d tile:%d,%d dist:%f\n", playerLightX, playerLightY, px, py,  distPlayer);
-                        // @todo gerer la non propagassion de la lumiere dans les murs...
-                        if (distPlayer < 4)
+                        if (profondeurColonne != 0)
                         {
-                            curLight = curLight + (PLAYER_LIGHT_INTENSITY / distPlayer);
+                            int delta = (wY - profondeurColonne) + 1;
+                            if (delta > 0)
+                                curLight = curLight / delta;
                         }
+                        // @todo : creer un masque de X*X autour du player pour "ajouter de la light"
+                        if (wY <= (playerLightY + 1) || value == 0 || value == 0x7F)
+                        {
+                            //Ray cast du player vers decor ?
+                            float distPlayer = sqrt((playerLightX - wX) * (playerLightX - wX) + (playerLightY - wY) * (playerLightY - wY));
+                            //Serial.printf("player:%d,%d tile:%d,%d dist:%f\n", playerLightX, playerLightY, px, py,  distPlayer);
+                            // @todo gerer la non propagassion de la lumiere dans les murs...
+                            if (distPlayer < 4)
+                            {
+                                curLight = curLight + (PLAYER_LIGHT_INTENSITY / distPlayer);
+                            }
+                        }
+                        //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
+                        curLight = min(curLight, MAX_LIGHT_INTENSITY);
                     }
-                    //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
-                    curLight = min(curLight, MAX_LIGHT_INTENSITY);
-
 #ifdef DEBUG
                     curLight = MAX_LIGHT_INTENSITY;
 #endif
 
-                    if (value == 0)
+                    if (value == BLOCK_AIR)
                     {
                         //rien le fond
                     }
@@ -1577,7 +1619,7 @@ TworldTile checkCollisionTo(int x, int y, int newX, int newY)
         for (int wY = y; wY <= newY; wY++)
         {
             TworldTile value = WORLD[wY][wX];
-            if (value.id != 0 && value.id != 0x7F)
+            if (!value.attr.traversable)
             {
                 return value;
             }
@@ -1620,25 +1662,25 @@ void calculateWorldCoordinates()
 {
     cameraX = Player.pos.pX - (ARCADA_TFT_WIDTH / 2);
     cameraX = max(cameraX, 0);
-    cameraX = min(cameraX, (WORLD_WIDTH * 16) - ARCADA_TFT_WIDTH);
+    cameraX = min(cameraX, ((WORLD_WIDTH-1) * 16) - ARCADA_TFT_WIDTH);
 
     cameraY = Player.pos.pY - (ARCADA_TFT_HEIGHT / 2);
     cameraY = max(cameraY, 0);
-    cameraY = min(cameraY, (WORLD_HEIGHT * 16) - ARCADA_TFT_HEIGHT);
+    cameraY = min(cameraY, ((WORLD_HEIGHT-1) * 16) - ARCADA_TFT_HEIGHT);
 
     worldX = cameraX / 16;
     currentOffset_X = cameraX % 16;
     worldMIN_X = min(worldX, (WORLD_WIDTH - 1) - (ARCADA_TFT_WIDTH / 16));
     worldMIN_X = max(worldMIN_X, 0);
     worldMAX_X = worldMIN_X + (ARCADA_TFT_WIDTH / 16);
-    worldMAX_X = min(worldMAX_X + 1, WORLD_WIDTH);
+    worldMAX_X = min(worldMAX_X + 1, (WORLD_WIDTH-1));
 
     worldY = cameraY / 16;
     currentOffset_Y = cameraY % 16;
     worldMIN_Y = min(worldY, (WORLD_HEIGHT - 1) - (ARCADA_TFT_HEIGHT / 16));
     worldMIN_Y = max(worldMIN_Y, 0);
     worldMAX_Y = worldMIN_Y + (ARCADA_TFT_HEIGHT / 16);
-    worldMAX_Y = min(worldMAX_Y + 1, WORLD_HEIGHT);
+    worldMAX_Y = min(worldMAX_Y + 1, (WORLD_HEIGHT-1));
 
     //Utile pour dessiner les sprites a l'ecran
     worldOffset_pX = (worldMIN_X * 16) + currentOffset_X;
@@ -1800,7 +1842,7 @@ void updatePlayer()
     {
         calculatePlayerCoords();
 
-        if ((brique_FRONT.id == 0 || brique_FRONT.id == BLOCK_UNDERGROUND_AIR) &&
+        if ((brique_FRONT.attr.traversable) &&
             ((Player.pos.direction > 0 && (Player.pos.pX < ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH)) ||
              (Player.pos.direction < 0 && (Player.pos.pX >= 2))))
         {
@@ -1962,7 +2004,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     {
         TworldTile tileTL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y);
         TworldTile tileBL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y + 15);
-        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileTL.attr.traversable) || (!tileBL.attr.traversable))
         {
             currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16)) + 16;
             currentEnnemy->speed_x = -currentEnnemy->speed_x;
@@ -1972,7 +2014,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     {
         TworldTile tileTR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y);
         TworldTile tileBR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y + 15);
-        if ((tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileTR.attr.traversable) || (!tileBR.attr.traversable))
         {
             currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16));
             currentEnnemy->speed_x = -currentEnnemy->speed_x;
@@ -1987,7 +2029,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileTL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y);
         TworldTile tileTR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y);
-        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileTL.attr.traversable) || (!tileTR.attr.traversable))
         {
             currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16)) + 16;
             currentEnnemy->speed_y = 0;
@@ -2003,7 +2045,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileBL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y + 16);
         TworldTile tileBR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y + 16);
-        if ((tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileBL.attr.traversable) || (!tileBR.attr.traversable))
         {
             currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16));
             currentEnnemy->bOnGround = true;
@@ -2127,7 +2169,7 @@ void checkItemCollisionsWorld(Titem *currentItem)
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileTL = getWorldAtPix(currentItem->x + 0, currentItem->new_y);
         TworldTile tileTR = getWorldAtPix(currentItem->x + 15, currentItem->new_y);
-        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileTL.attr.traversable) || (!tileTR.attr.traversable))
         {
             currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16)) + 16;
             currentItem->speed_y = 0;
@@ -2143,7 +2185,7 @@ void checkItemCollisionsWorld(Titem *currentItem)
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileBL = getWorldAtPix(currentItem->x + 0, currentItem->new_y + 16);
         TworldTile tileBR = getWorldAtPix(currentItem->x + 15, currentItem->new_y + 16);
-        if ((tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileBL.attr.traversable) || (!tileBR.attr.traversable))
         {
             currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16));
             currentItem->bOnGround = true;
@@ -2193,7 +2235,7 @@ void updatePlayerPosition()
             Player.pos.newX = Player.pos.pX + Player.pos.speedX;
             Player.bMoving = true;
 
-            Player.pos.newX = min(((WORLD_WIDTH - 1) * 16), Player.pos.newX);
+            Player.pos.newX = min(((WORLD_WIDTH - 2) * 16), Player.pos.newX);
         }
         else if (Player.pos.speedX < 0)
         {
@@ -2214,7 +2256,7 @@ void checkPlayerCollisionsWorld()
     {
         TworldTile tileTL = getWorldAtPix(Player.pos.newX, Player.pos.pY);
         TworldTile tileBL = getWorldAtPix(Player.pos.newX, Player.pos.pY + 15);
-        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileTL.attr.traversable) || (!tileBL.attr.traversable))
         {
             Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + 16;
             Player.pos.speedX = 0;
@@ -2224,7 +2266,7 @@ void checkPlayerCollisionsWorld()
     {
         TworldTile tileTR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY);
         TworldTile tileBR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY + 15);
-        if ((tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileTR.attr.traversable) || (!tileBR.attr.traversable))
         {
             Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16));
             Player.pos.speedX = 0;
@@ -2239,7 +2281,7 @@ void checkPlayerCollisionsWorld()
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileTL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY);
         TworldTile tileTR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY);
-        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileTL.attr.traversable) || (!tileTR.attr.traversable))
         {
             Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16)) + 16;
             Player.pos.speedY = 0;
@@ -2255,7 +2297,7 @@ void checkPlayerCollisionsWorld()
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileBL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY + 16);
         TworldTile tileBR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY + 16);
-        if ((tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
+        if ((!tileBL.attr.traversable) || (!tileBR.attr.traversable))
         {
             Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16));
             Player.bOnGround = true;
@@ -2350,28 +2392,41 @@ void checkPlayerInputs()
 
         if (counterActionB >= FRAMES_ACTION_B) //Action (pour le moment minage seulement)
         {
-            TworldTile value = getWorldAt(Player.cible_wX, Player.cible_wY);
+            TworldTile tile = getWorldAt(Player.cible_wX, Player.cible_wY);
 
             counterActionB = 0;
             coolDownActionB = FRAMES_COOLDOWN_B;
             lastCibleX = lastCibleY = 0;
 
-            //Serial.printf("Dig:%d,%d v:%d\n", Player.cible_wX, Player.cible_wY, value);
-            if (value.id != BLOCK_AIR && value.id != BLOCK_UNDERGROUND_AIR && Player.pos.YDown < (WORLD_HEIGHT - 1))
+            //Serial.printf("Dig:%d,%d v:%d\n", Player.cible_wX, Player.cible_wY, tile);
+            if (tile.attr.life != BLOCK_LIFE_NA && !tile.attr.traversable && Player.pos.YDown < (WORLD_HEIGHT - 1))
             {
-                // @todo span item ramassable ? ou tile ramassable ?
-                createItem(Player.cible_wX, Player.cible_wY, value.id);
+                uint8_t hauteur_sol = WORLD[REF_ROW][Player.cible_wX].id;
+                //on teste si on a creusé dans de la pierre solide et on exclue aussi le ground ( @todo : spawn herbe quand meme )
+                if (tile.id >= BLOCK_ROCK && tile.attr.life != BLOCK_LIFE_NA)
+                {
+                    // @todo span item ramassable ? ou tile ramassable ?
+                    createDropFrom(Player.cible_wX, Player.cible_wY, tile.id);
 
-                if (value.id < BLOCK_ROCK)
-                    value.id = BLOCK_AIR;
+                    tile.id = BLOCK_UNDERGROUND_AIR;
+                    tile.attr.life = BLOCK_LIFE_NA;
+                    tile.attr.traversable = 1;
+                }
                 else
-                    value.id = BLOCK_UNDERGROUND_AIR;
+                {
+                    // @todo span herbe
+                    //createDropFrom(Player.cible_wX, Player.cible_wY, tile.id);
 
-                // @todo : tester le type de value
+                    tile.id = BLOCK_AIR;
+                    tile.attr.life = BLOCK_LIFE_NA;
+                    tile.attr.traversable = 1;
+                }
+
+                // @todo : tester le type de tile
                 sndPlayerCanal1.play(AudioSampleRock_break);
                 parts.createExplosion(Player.cible_pX + 8, Player.cible_pY + 8, 12); //@todo colorer avec la couleur de la brique en cours de travail
 
-                setWorldAt(Player.cible_wX, Player.cible_wY, value);
+                setWorldAt(Player.cible_wX, Player.cible_wY, tile);
                 updateHauteurColonne(Player.cible_wX, Player.cible_wY);
                 //update hauteur colonne
             }
@@ -2735,7 +2790,7 @@ bool LoadGame(uint8_t numEmplacement)
                 buff[3] = 0;
                 data.read(); // ,
                 int value = strtol(buff, 0, 10);
-                WORLD[wY][wX].attr.raw = (uint8_t)value;
+                WORLD[wY][wX].attr.RAW = (uint8_t)value;
             }
         }
         data.read(); //  ]
@@ -2784,7 +2839,7 @@ bool SaveGame(uint8_t numEmplacement)
         {
             for (int wX = 0; wX < WORLD_WIDTH; wX++)
             {
-                uint8_t value = WORLD[wY][wX].attr.raw;
+                uint8_t value = WORLD[wY][wX].attr.RAW;
                 char buff[5];
                 sprintf(buff, "%03d,", value);
                 data.write(buff[0]);
