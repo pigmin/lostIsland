@@ -6,7 +6,7 @@
         int worldY;
         int type;
         int max_frames;
-        int max_anim;
+        int nb_anim_frames;
 
         bool bFalling;
         bool bJumping;
@@ -21,9 +21,12 @@
         int new_x;
         int new_y;
         int current_framerate;
-        int anim;
+        int anim_frame;
         int speed_x;
         int speed_y;
+
+        int health;
+        int max_health;
     } Tennemy;
 
 
@@ -36,11 +39,14 @@
 
     #define SPIDER_ENNEMY           's'
     #define SPIDER_WALKING_SPEED    3
+    #define SPIDER_HEALTH       10
 
     #define ZOMBI_ENNEMY        'z'
     #define ZOMBI_WALKING_SPEED    1
+    #define ZOMBI_HEALTH       30
 
     #define SKEL_ENNEMY         'k'
     #define SKEL_WALKING_SPEED    2
+    #define SKEL_HEALTH       60
     
 #endif

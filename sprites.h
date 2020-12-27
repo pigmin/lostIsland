@@ -2,14 +2,15 @@
 #define SPRITES_H
 
 
-   #define PLAYER_STATE_IDLE     0
-   #define PLAYER_STATE_WALK     1
-   #define PLAYER_STATE_JUMP     2
-   #define PLAYER_STATE_FALL     4
-   #define PLAYER_STATE_DIG      8
+   #define PLAYER_STATE_IDLE              0
+   #define PLAYER_STATE_WALK              1
+   #define PLAYER_STATE_JUMP              2
+   #define PLAYER_STATE_DOUBLE_JUMP       4
+   #define PLAYER_STATE_FALL              8
+   #define PLAYER_STATE_DIG               16
 
-   #define PLAYER_STATE_DIE      64   
-   #define PLAYER_STATE_WIN      128
+   #define PLAYER_STATE_DIE               64   
+   #define PLAYER_STATE_WIN               128
 
 
    //Idle  
@@ -32,6 +33,8 @@
    #define PLAYER_FRAME_JUMP_1  0
    #define PLAYER_FRAME_JUMP_2  1
    #define PLAYER_FRAME_JUMP_3  2
+   #define PLAYER_FRAME_JUMP_4  3
+   #define PLAYER_FRAME_JUMP_5  4
 
    //Action
    #define PLAYER_FRAME_ACTION_1  0
@@ -68,6 +71,19 @@
    const int PLAYER_WIN_FRAMES = FPS*8; 
    const int PLAYER_GROW_FRAMES = FPS*2; 
    const int PLAYER_TOUCH_FRAMES = FPS*2; 
+
+
+#define  FX_NONE           0
+#define  FX_DOUBLE_JUMP    1
+
+#define FX_FRAME_DOUBLE_JUMP_1  0
+#define FX_FRAME_DOUBLE_JUMP_2  1
+#define FX_FRAME_DOUBLE_JUMP_3  2
+#define FX_FRAME_DOUBLE_JUMP_4  3
+#define FX_FRAME_DOUBLE_JUMP_5  4
+
+const int FX_FRAMERATE_DOUBLE_JUMP = 2;
+
 
 
 #endif

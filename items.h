@@ -18,7 +18,7 @@ typedef struct Titem {
     int worldY;
     uint8_t type;
     int max_frames;
-    int max_anim;
+    int nb_anim_frames;
 
     bool bFalling;
     bool bJumping;
@@ -33,7 +33,7 @@ typedef struct Titem {
     int new_x;
     int new_y;
     int current_framerate;
-    int anim;
+    int anim_frame;
     int speed_x;
     int speed_y;
 } Titem;

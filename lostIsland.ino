@@ -5,18 +5,8 @@
 #include <Adafruit_ZeroTimer.h>
 
 #undef DEBUG
-//#include <FastLED.h>
-
 //#define NO_SOUND
 #define FPS 25
-
-uint8_t frameRate;
-uint16_t frameCount;
-uint8_t eachFrameMillis;
-long lastFrameStart;
-long nextFrameStart;
-bool post_render;
-uint8_t lastFrameDurationMs;
 
 // @todo passer en time based et non frame based
 // @todo idem pour les speed et anims frames des sprites...
@@ -37,7 +27,21 @@ uint8_t lastFrameDurationMs;
 #define HUD_ITEMS_X 16
 #define HUD_ITEMS_Y ARCADA_TFT_HEIGHT - 18
 
-#define MAX_JUMP_PHASE 11
+#define BASE_X_PLAYER 7
+#define BASE_Y_PLAYER 1
+
+#define FALLING_SPEED 1
+#define WALKING_SPEED 2
+#define RUNNING_SPEED 2
+
+#define MAX_SPEED_X 4
+#define MAX_SPEED_Y 15
+
+#define JUMP_SPEED 10
+#define DOUBLE_JUMP_SPEED 8
+
+
+
 
 #include "types.h"
 #include "items.h"
@@ -53,11 +57,13 @@ uint8_t lastFrameDurationMs;
 
 #include "SimplexNoise.h"
 
-#include "musics/Astaroth_-_Title.c"
-#include "musics/PinballPalace.c"
+static const uint32_t PROGMEM pmf_ninja[] =
+    {
+#include "musics/ninja.h"
+};
 
-static const uint8_t PROGMEM pmf_aceman[]=
-{
+static const uint32_t PROGMEM pmf_aceman[] =
+    {
 #include "musics/aceman.h"
 };
 
@@ -86,6 +92,14 @@ static const uint8_t PROGMEM pmf_aceman[]=
 #include "res/player_jump1.c"
 #include "res/player_jump2.c"
 #include "res/player_jump3.c"
+#include "res/player_jump4.c"
+#include "res/player_jump5.c"
+
+#include "res/fx_jump1.c"
+#include "res/fx_jump2.c"
+#include "res/fx_jump3.c"
+#include "res/fx_jump4.c"
+#include "res/fx_jump5.c"
 
 #include "res/spider_walk1.c"
 #include "res/spider_walk2.c"
@@ -116,28 +130,24 @@ static const uint8_t PROGMEM pmf_aceman[]=
 #include "res/or_small.c"
 #include "res/redstone_small.c"
 
-#include "res/grass_left_8x8.c"
-#include "res/grass_middle_8x8.c"
-#include "res/grass_right_8x8.c"
-
-#include "res/tree_bottom_8x8.c"
-#include "res/tree_top_8x8.c"
-
-#include "res/montagne_left_8x8.c"
-#include "res/montagne_middle_8x8.c"
-#include "res/montagne_right_8x8.c"
-#include "res/montagne_top_32x8.c"
-
-#include "res/cloud1_32x24.c"
-#include "res/cloud2_32x24.c"
-
 #include "res/pioche.c"
 
 #include "sounds/Jump.h"
 #include "sounds/Pioche.h"
 #include "sounds/RockBreaks.h"
+#include "sounds/ItemPickup.h"
 
 #include "pmf_player.h"
+
+
+uint8_t frameRate;
+uint16_t frameCount;
+uint8_t eachFrameMillis;
+long lastFrameStart;
+long nextFrameStart;
+bool post_render;
+uint8_t lastFrameDurationMs;
+
 
 
 extern Adafruit_SPIFlash Arcada_QSPI_Flash;
@@ -150,7 +160,7 @@ int Swidth, Sheight;
 Adafruit_ZeroTimer zerotimer3 = Adafruit_ZeroTimer(3);
 
 static pmf_player s_player;
-static unsigned s_effect_channel=0;
+static unsigned s_effect_channel = 0;
 
 typedef enum TGameStates
 {
@@ -165,19 +175,6 @@ typedef enum TGameStates
 } TGameStates;
 
 TGameStates gameState = STATE_MAIN_MENU;
-
-#define BASE_X_PLAYER 7
-#define BASE_Y_PLAYER 1
-
-#define FALLING_SPEED 1
-#define WALKING_SPEED 2
-#define RUNNING_SPEED 2
-
-#define MAX_SPEED_X 4
-#define MAX_SPEED_Y 15
-
-#define JUMP_SPEED 10
-#define DOUBLE_JUMP_SPEED   8
 
 Particles parts;
 
@@ -211,16 +208,9 @@ int coolDownActionB = 0;
 
 TPlayer Player;
 
-unsigned char WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
+TworldTile WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
 #define HEADER_ROW WORLD_HEIGHT
 #define REF_ROW WORLD_HEIGHT + 1
-
-#define BACKWORLD_WIDTH (WORLD_WIDTH / 4) + (ARCADA_TFT_WIDTH / 8)
-#define BACKWORLD_HEIGHT 16
-
-//unsigned char WORLD_BACK[BACKWORLD_HEIGHT][BACKWORLD_WIDTH];
-
-unsigned char WORLD_INFOS[WORLD_HEIGHT + 2][WORLD_WIDTH];
 
 unsigned char SCREEN_WORLD_OVERLAY[(ARCADA_TFT_WIDTH + 1) / 16][(ARCADA_TFT_HEIGHT + 1) / 16];
 
@@ -240,9 +230,9 @@ void drawTiles();
 void drawParticles();
 void drawWorld();
 void pixelToWorld(int *pX, int *pY);
-int checkCollisionAt(int newX, int newY);
-uint8_t checkCollisionTo(int x, int y, int newX, int newY);
-void checkPlayerState();
+TworldTile checkCollisionAt(int newX, int newY);
+TworldTile checkCollisionTo(int x, int y, int newX, int newY);
+void checkPlayerCollisionsEntities();
 void updatePlayer();
 void updateEnnemies();
 void updateItems();
@@ -271,97 +261,113 @@ int cameraY = 0;
 int currentX_back = 0;
 
 int jumpPhase = 0;
-unsigned char brique_UP = 0;
-unsigned char brique_DOWN = 0;
-unsigned char brique_DOWN_FRONT = 0;
-unsigned char brique_FRONT = 0;
-unsigned char brique_PLAYER = 0;
+TworldTile brique_UP = {0};
+TworldTile brique_DOWN =  {0};
+TworldTile brique_DOWN_FRONT =  {0};
+TworldTile brique_FRONT =  {0};
+TworldTile brique_PLAYER =  {0};
 
 int count_player_die = 0;
-int count_player_touched = 0;
 int count_player_win = 0;
-
-bool bDoJump = false;
-bool bDoDoubleJump = false;
-bool bDoWalk = false;
 
 unsigned long prevDisplay = 0; // when the digital clock was displayed
 
-
-void PlayMOD(const void *pmf_file) {
+void PlayMOD(const void *pmf_file)
+{
     s_player.load(pmf_file);
-    s_player.start(uint32_t(AUDIO_SAMPLE_RATE_EXACT+0.5f));
-  zerotimer3.enable(true);    
+    s_player.start(uint32_t(AUDIO_SAMPLE_RATE_EXACT + 0.5f));
 }
 
-void StopMOD() {
-    s_player.stop();
-  zerotimer3.enable(false);    
+void StopMOD()
+{
+    if (s_player.is_playing())
+        s_player.stop();
+    //  zerotimer3.enable(false);
 }
 void MOD_callback(void)
 {
     AudioNoInterrupts();
-    s_player.update(); // keep updating the audio buffer...
+    if (s_player.is_playing())
+        s_player.update(); // keep updating the audio buffer...
     AudioInterrupts();
 }
 
 void TC3_Handler()
 {
-  Adafruit_ZeroTimer::timerHandler(3);
+    Adafruit_ZeroTimer::timerHandler(3);
 }
 
-void setup_timer3(float freq) {
-  uint8_t divider  = 1;
-  uint16_t compare = 1;
+void setup_timer3(float freq)
+{
+    uint8_t divider = 1;
+    uint16_t compare = 1;
 
-  tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
+    tc_clock_prescaler prescaler = TC_CLOCK_PRESCALER_DIV1;
 
-  if ((freq < 24000000) && (freq > 800)) {
-    divider = 1;
-    prescaler = TC_CLOCK_PRESCALER_DIV1;
-    compare = 48000000/freq;
-  } else if (freq > 400) {
-    divider = 2;
-    prescaler = TC_CLOCK_PRESCALER_DIV2;
-    compare = (48000000/2)/freq;
-  } else if (freq > 200) {
-    divider = 4;
-    prescaler = TC_CLOCK_PRESCALER_DIV4;
-    compare = (48000000/4)/freq;
-  } else if (freq > 100) {
-    divider = 8;
-    prescaler = TC_CLOCK_PRESCALER_DIV8;
-    compare = (48000000/8)/freq;
-  } else if (freq > 50) {
-    divider = 16;
-    prescaler = TC_CLOCK_PRESCALER_DIV16;
-    compare = (48000000/16)/freq;
-  } else if (freq > 12) {
-    divider = 64;
-    prescaler = TC_CLOCK_PRESCALER_DIV64;
-    compare = (48000000/64)/freq;
-  } else if (freq > 3) {
-    divider = 256;
-    prescaler = TC_CLOCK_PRESCALER_DIV256;
-    compare = (48000000/256)/freq;
-  } else if (freq >= 0.75) {
-    divider = 1024;
-    prescaler = TC_CLOCK_PRESCALER_DIV1024;
-    compare = (48000000/1024)/freq;
-  } else {
-    Serial.println("Invalid frequency");
-    while (1) delay(10);
-  }
+    if ((freq < 24000000) && (freq > 800))
+    {
+        divider = 1;
+        prescaler = TC_CLOCK_PRESCALER_DIV1;
+        compare = 48000000 / freq;
+    }
+    else if (freq > 400)
+    {
+        divider = 2;
+        prescaler = TC_CLOCK_PRESCALER_DIV2;
+        compare = (48000000 / 2) / freq;
+    }
+    else if (freq > 200)
+    {
+        divider = 4;
+        prescaler = TC_CLOCK_PRESCALER_DIV4;
+        compare = (48000000 / 4) / freq;
+    }
+    else if (freq > 100)
+    {
+        divider = 8;
+        prescaler = TC_CLOCK_PRESCALER_DIV8;
+        compare = (48000000 / 8) / freq;
+    }
+    else if (freq > 50)
+    {
+        divider = 16;
+        prescaler = TC_CLOCK_PRESCALER_DIV16;
+        compare = (48000000 / 16) / freq;
+    }
+    else if (freq > 12)
+    {
+        divider = 64;
+        prescaler = TC_CLOCK_PRESCALER_DIV64;
+        compare = (48000000 / 64) / freq;
+    }
+    else if (freq > 3)
+    {
+        divider = 256;
+        prescaler = TC_CLOCK_PRESCALER_DIV256;
+        compare = (48000000 / 256) / freq;
+    }
+    else if (freq >= 0.75)
+    {
+        divider = 1024;
+        prescaler = TC_CLOCK_PRESCALER_DIV1024;
+        compare = (48000000 / 1024) / freq;
+    }
+    else
+    {
+        Serial.println("Invalid frequency");
+        while (1)
+            delay(10);
+    }
 
-  zerotimer3.enable(false);
-  zerotimer3.configure(prescaler,       // prescaler
-          TC_COUNTER_SIZE_16BIT,       // bit width of timer/counter
-          TC_WAVE_GENERATION_MATCH_PWM // frequency or PWM mode
-          );
+    zerotimer3.enable(false);
+    zerotimer3.configure(prescaler,                   // prescaler
+                         TC_COUNTER_SIZE_16BIT,       // bit width of timer/counter
+                         TC_WAVE_GENERATION_MATCH_PWM // frequency or PWM mode
+    );
 
-  zerotimer3.setCompare(0, compare);
-  zerotimer3.setCallback(true, TC_CALLBACK_CC_CHANNEL0, MOD_callback);
- // zerotimer3.enable(true);
+    zerotimer3.setCompare(0, compare);
+    zerotimer3.setCallback(true, TC_CALLBACK_CC_CHANNEL0, MOD_callback);
+    zerotimer3.enable(true);
 }
 
 void setFrameRate(uint8_t rate)
@@ -394,8 +400,8 @@ bool nextFrame()
         remaining = nextFrameStart - now;
         // if we have more than 1ms to spare, lets sleep
         // we should be woken up by timer0 every 1ms, so this should be ok
-       //  if (remaining > 1)
-       //    nop();
+        //  if (remaining > 1)
+        //    nop();
         return false;
     }
 
@@ -411,9 +417,9 @@ bool nextFrame()
     return post_render;
 }
 
-unsigned char getWorldAtPix(int px, int py)
+TworldTile getWorldAtPix(int px, int py)
 {
-    unsigned char res = 0;
+    TworldTile res = {0};
 
     int x = px / 16;
     int y = py / 16;
@@ -432,28 +438,27 @@ void updateHauteurColonne(int x, int y)
     int newH = 0;
     for (int wY = 0; wY < WORLD_HEIGHT; wY++)
     {
-        if (WORLD[wY][x] != 0)
+        if (WORLD[wY][x].id != 0)
         {
             newH = wY;
             break;
         }
     }
-    WORLD[HEADER_ROW][x] = newH;
+    WORLD[HEADER_ROW][x].id = newH;
 }
 
-unsigned char getWorldAt(int x, int y)
+TworldTile getWorldAt(int x, int y)
 {
-    unsigned char res = 0;
-
+    TworldTile res = {0};
+    
     if ((x >= 0 && x < WORLD_WIDTH) && (y >= 0 && y < WORLD_HEIGHT))
         res = WORLD[y][x];
 
     return res;
 }
 
-void setWorldAt(int x, int y, unsigned char val)
+void setWorldAt(int x, int y, TworldTile val)
 {
-
     if ((x > 0 && x < WORLD_WIDTH) && (y > 0 && y < WORLD_HEIGHT))
         WORLD[y][x] = val;
 }
@@ -570,7 +575,7 @@ void initPlayer()
     Player.pos.worldX = 0;
     Player.pos.worldY = 0;
 
-    Player.anim = 0;
+    Player.anim_frame = 0;
     Player.current_framerate = 0;
     Player.stateAnim = PLAYER_STATE_IDLE;
 
@@ -595,11 +600,14 @@ void initPlayer()
     Player.iTouchCountDown = 0;
 
     Player.bOnGround = true;
+
+    Player.max_health = 20;
+    Player.health = 20;
 }
 
 void initGame()
 {
-    arcada.pixels.fill(0x008800);
+    arcada.pixels.fill(0x000000);
     //    arcada.pixels.setPixelColor(4, 0x00FF00);
     arcada.pixels.show();
     //arcada.display->setFont(ArialMT_Plain_10);
@@ -619,9 +627,9 @@ void initGame()
 
     jumpPhase = 0;
 
-    bDoJump = false;
-    bDoDoubleJump = false;
-    bDoWalk = false;
+    Player.bWantJump = false;
+    Player.bWantDoubleJump = false;
+    Player.bWantWalk = false;
 
     Player.pos.speedX = 0;
     Player.pos.speedY = 0;
@@ -629,15 +637,15 @@ void initGame()
     Player.pos.newY = 0;
     Player.cible_wX, Player.cible_wY = 0;
 
-    Player.anim = 0;
+    Player.anim_frame = 0;
     Player.current_framerate = 0;
     Player.stateAnim = PLAYER_STATE_IDLE;
 
     count_player_die = 0;
     count_player_win = 0;
-    count_player_touched = 0;
 
     initWorld();
+    initPlayer();
 }
 
 void set_falling()
@@ -645,7 +653,7 @@ void set_falling()
     if (Player.stateAnim != PLAYER_STATE_FALL)
     {
         Player.stateAnim = PLAYER_STATE_FALL;
-        Player.anim = PLAYER_FRAME_FALLING_1;
+        Player.anim_frame = PLAYER_FRAME_FALLING_1;
         Player.current_framerate = 0;
     }
 }
@@ -655,7 +663,7 @@ void set_idle()
     if (Player.stateAnim != PLAYER_STATE_IDLE)
     {
         Player.stateAnim = PLAYER_STATE_IDLE;
-        Player.anim = PLAYER_FRAME_IDLE_1;
+        Player.anim_frame = PLAYER_FRAME_IDLE_1;
         Player.current_framerate = 0;
     }
 }
@@ -666,7 +674,7 @@ void set_jumping()
     {
         Player.stateAnim = PLAYER_STATE_JUMP;
 
-        Player.anim = PLAYER_FRAME_JUMP_1;
+        Player.anim_frame = PLAYER_FRAME_JUMP_1;
         Player.current_framerate = 0;
     }
 }
@@ -677,7 +685,7 @@ void set_walking()
     {
         Player.stateAnim = PLAYER_STATE_WALK;
 
-        Player.anim = PLAYER_FRAME_WALK_1;
+        Player.anim_frame = PLAYER_FRAME_WALK_1;
         Player.current_framerate = 0;
     }
 }
@@ -688,7 +696,7 @@ void set_digging()
     {
         Player.stateAnim = PLAYER_STATE_DIG;
 
-        Player.anim = PLAYER_FRAME_ACTION_1;
+        Player.anim_frame = PLAYER_FRAME_ACTION_1;
         Player.current_framerate = 0;
     }
 }
@@ -699,34 +707,50 @@ void set_dying()
     {
         Player.stateAnim = PLAYER_STATE_DIE;
 
-        stopMusic();
+        //stopMusic();
         //    sndPlayerCanal1.play(AudioSamplePlayerdeath);
         Player.bDying = true;
         Player.iTouchCountDown = 0;
         Player.bTouched = false;
-        Player.bWalking = true;
         jumpPhase = 0;
         count_player_die = 0;
-        Player.anim = PLAYER_FRAME_DIE_1;
+        Player.anim_frame = PLAYER_FRAME_DIE_1;
         Player.current_framerate = 0;
+    }
+}
+
+void set_double_jump_fx(void)
+{
+    if (Player.FX.stateAnim != FX_DOUBLE_JUMP)
+    {
+        Player.FX.stateAnim = FX_DOUBLE_JUMP;
+        Player.FX.anim_frame = 0;
+        Player.FX.current_framerate = FX_FRAMERATE_DOUBLE_JUMP;
+        Player.FX.direction = Player.pos.direction;
+        Player.FX.pX = Player.pos.pX;
+        Player.FX.pY = Player.pos.pY;
     }
 }
 
 void set_touched()
 {
-    /*    if (bPlayerGrand)
+    // @todo : gerer les type de monstres
+    if (Player.iTouchCountDown == 0)
     {
-        //    sndPlayerCanal3.play(AudioSampleSmb_pipe);
-        Player.bTouched = true;
-        Player.iTouchCountDown = 2 * FPS;
-        count_player_touched = 0;
-        //Player.anim = PLAYER_FRAME_TOUCH_1;
-        //Player.current_framerate = 0;
-        bPlayerGrand = false;
-    }
-    else if (Player.iTouchCountDown == 0)*/
-    {
-        set_dying();
+        Player.health -= 10;
+
+        if (Player.health > 0)
+        {
+            //    sndPlayerCanal3.play(AudioSampleSmb_pipe);
+            Player.bTouched = true;
+            Player.iTouchCountDown = 2 * FPS;
+            //Player.anim_frame = PLAYER_FRAME_TOUCH_1;
+            //Player.current_framerate = 0;
+        }
+        else if (Player.iTouchCountDown == 0)
+        {
+            set_dying();
+        }
     }
 }
 
@@ -742,7 +766,7 @@ void set_wining()
         bWin = true;
         jumpPhase = 0;
         count_player_win = 0;
-        Player.anim = PLAYER_FRAME_WIN_1;
+        Player.anim_frame = PLAYER_FRAME_WIN_1;
         Player.current_framerate = 0;
     }
 }
@@ -751,6 +775,7 @@ void initWorld()
 {
 
     //uint8_t zeNoise[WORLD_WIDTH];
+    memset(WORLD, 0, sizeof(WORLD));
     SimplexNoise noiseGen;
 
     int maxProfondeur = 0;
@@ -764,22 +789,22 @@ void initWorld()
         maxProfondeur = max(maxProfondeur, rowGround);
 
         //On sauvegarde la hauteur sol dans la derniere ligne du world (invisible)
-        WORLD[HEADER_ROW][wX] = rowGround;
+        WORLD[HEADER_ROW][wX].id = rowGround;
         //On sauve la hauteur originelle, en dessous on est dans le sol (meme si creusé)
-        WORLD[REF_ROW][wX] = rowGround;
+        WORLD[REF_ROW][wX].id = rowGround;
 
         for (int wY = 0; wY < WORLD_HEIGHT; wY++)
         {
             if (wY > (rowGround + 7))
-                WORLD[wY][wX] = BLOCK_ROCK;
+                WORLD[wY][wX].id = BLOCK_ROCK;
             else if (wY > (rowGround + 3))
-                WORLD[wY][wX] = BLOCK_GROUND_ROCK;
+                WORLD[wY][wX].id = BLOCK_GROUND_ROCK;
             else if (wY > rowGround)
-                WORLD[wY][wX] = BLOCK_GROUND;
+                WORLD[wY][wX].id = BLOCK_GROUND;
             else if (wY == rowGround)
-                WORLD[wY][wX] = BLOCK_GROUND_TOP;
+                WORLD[wY][wX].id = BLOCK_GROUND_TOP;
             else
-                WORLD[wY][wX] = 0;
+                WORLD[wY][wX].id = 0;
         }
     }
     float minN = 999999;
@@ -787,7 +812,7 @@ void initWorld()
     //Update bricks to cool rendering
     for (int wX = 0; wX < WORLD_WIDTH; wX++)
     {
-        int curProdondeur = WORLD[HEADER_ROW][wX];
+        int curProdondeur = WORLD[HEADER_ROW][wX].id;
         curProdondeur = max(4, curProdondeur);
 
         for (int wY = curProdondeur - 4; wY < WORLD_HEIGHT; wY++)
@@ -795,17 +820,17 @@ void initWorld()
             //            float noise = noiseGen.fractal(8, (float)16*wX / (float)WORLD_WIDTH, (float)16*wY / (float)WORLD_HEIGHT);
             float noise = SimplexNoise::noise((float)16 * wX / (float)WORLD_WIDTH, (float)16 * wY / (float)WORLD_HEIGHT);
             int16_t densite = int(noise * AMPLITUDE_DENSITE);
-            if (WORLD[wY][wX] <= BLOCK_GROUND_ROCK)
+            if (WORLD[wY][wX].id <= BLOCK_GROUND_ROCK)
             {
                 if (densite > MAX_DENSITE)
-                    WORLD[wY][wX] = BLOCK_AIR;
+                    WORLD[wY][wX].id = BLOCK_AIR;
             }
             else
             {
                 if (abs(densite) > MAX_DENSITE || densite == 0)
-                    WORLD[wY][wX] = BLOCK_UNDERGROUND_AIR;
+                    WORLD[wY][wX].id = BLOCK_UNDERGROUND_AIR;
                 else
-                    WORLD[wY][wX] = abs(densite) + BLOCK_ROCK;
+                    WORLD[wY][wX].id = abs(densite) + BLOCK_ROCK;
             }
 
             if (noise < minN)
@@ -818,14 +843,14 @@ void initWorld()
     {
         for (int wY = 0; wY < WORLD_HEIGHT; wY++)
         {
-            if ((WORLD[wY][wX] != 0) && (WORLD[wY][wX] != BLOCK_UNDERGROUND_AIR))
+            if ((WORLD[wY][wX].id != 0) && (WORLD[wY][wX].id != BLOCK_UNDERGROUND_AIR))
             {
-                WORLD[HEADER_ROW][wX] = wY;
-                WORLD[REF_ROW][wX] = wY;
+                WORLD[HEADER_ROW][wX].id = wY;
+                WORLD[REF_ROW][wX].id = wY;
 
-                WORLD[wY][wX] = BLOCK_GROUND_TOP;
+                WORLD[wY][wX].id = BLOCK_GROUND_TOP;
                 if (wY + 1 < (WORLD_HEIGHT - 1))
-                    WORLD[wY + 1][wX] = BLOCK_GROUND;
+                    WORLD[wY + 1][wX].id = BLOCK_GROUND;
 
                 break;
             }
@@ -839,11 +864,11 @@ void initWorld()
         {
             if (NB_WORLD_ENNEMIES < MAX_ENNEMIES)
             {
-                int haut = WORLD[HEADER_ROW][wX];
+                int haut = WORLD[HEADER_ROW][wX].id;
                 int seed = random(100);
                 if (seed < 10 && NB_WORLD_SKELS < MAX_SKELS)
                 {
-                    if (WORLD[HEADER_ROW][wX] == 0)
+                    if (WORLD[HEADER_ROW][wX].id == 0)
                     {
                         /*
                         //Zombi
@@ -858,11 +883,14 @@ void initWorld()
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_x = SKEL_WALKING_SPEED;
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_y = 0;
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_frames = 4;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_anim = 3;
+                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].nb_anim_frames = 3;
 
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].bFalling = false;
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].bJumping = false;
                         ENNEMIES[CURRENT_LEVEL_ENNEMIES].bOnGround = false;
+
+                        ENNEMIES[NB_WORLD_ENNEMIES].max_health = ZOMBI_HEALTH;
+                        ENNEMIES[NB_WORLD_ENNEMIES].health = ZOMBI_HEALTH;
 */
                         NB_WORLD_SKELS++;
                         //CURRENT_LEVEL_ENNEMIES++;
@@ -870,7 +898,7 @@ void initWorld()
                 }
                 else if (seed < 33 && NB_WORLD_ZOMBIES < MAX_ZOMBIES)
                 {
-                    if (WORLD[wY][wX] == 0)
+                    if (WORLD[wY][wX].id == 0)
                     {
 
                         //Zombi
@@ -885,11 +913,14 @@ void initWorld()
                         ENNEMIES[NB_WORLD_ENNEMIES].speed_x = ZOMBI_WALKING_SPEED;
                         ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
                         ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 4;
-                        ENNEMIES[NB_WORLD_ENNEMIES].max_anim = 3;
+                        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 3;
 
                         ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
                         ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
                         ENNEMIES[NB_WORLD_ENNEMIES].bOnGround = false;
+
+                        ENNEMIES[NB_WORLD_ENNEMIES].max_health = ZOMBI_HEALTH;
+                        ENNEMIES[NB_WORLD_ENNEMIES].health = ZOMBI_HEALTH;
 
                         NB_WORLD_ENNEMIES++;
                         NB_WORLD_ZOMBIES++;
@@ -897,7 +928,7 @@ void initWorld()
                 }
                 else if (seed <= 50)
                 {
-                    if (WORLD[wY][wX] == 0x7f && WORLD[wY][wX + 1] == 0x7f && WORLD[wY][wX - 1] == 0x7f && WORLD[wY - 1][wX] == 0x7f)
+                    if (WORLD[wY][wX].id == 0x7f && WORLD[wY][wX + 1].id == 0x7f && WORLD[wY][wX - 1].id == 0x7f && WORLD[wY - 1][wX].id == 0x7f)
                     {
                         //Spiders
                         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
@@ -911,11 +942,14 @@ void initWorld()
                         ENNEMIES[NB_WORLD_ENNEMIES].speed_x = SPIDER_WALKING_SPEED;
                         ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
                         ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 2;
-                        ENNEMIES[NB_WORLD_ENNEMIES].max_anim = 2;
+                        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 2;
 
                         ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
                         ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
                         ENNEMIES[NB_WORLD_ENNEMIES].bOnGround = false;
+
+                        ENNEMIES[NB_WORLD_ENNEMIES].max_health = SPIDER_HEALTH;
+                        ENNEMIES[NB_WORLD_ENNEMIES].health = SPIDER_HEALTH;
 
                         NB_WORLD_ENNEMIES++;
                         NB_WORLD_SPIDERS++;
@@ -934,81 +968,9 @@ void initWorld()
 
     NB_WORLD_ITEMS = 0;
     CURRENT_QUEUE_ITEMS = 0;
-#ifdef USE_WORLD_BACK
 
-    memset(&WORLD_BACK, 0, BACKWORLD_HEIGHT * BACKWORLD_WIDTH);
-
-    //Montagnes grandes
-    int montI = random(10);
-    while (montI < (BACKWORLD_WIDTH - 10))
-    {
-        int pX = montI;
-        if (random(10) < 5)
-        {
-            int idx = 0;
-
-            for (idx = pX + 1; idx <= pX + 8; idx++)
-                WORLD_BACK[BACKWORLD_HEIGHT - 1][idx] = 152;
-            WORLD_BACK[BACKWORLD_HEIGHT - 1][pX] = 150;
-            WORLD_BACK[BACKWORLD_HEIGHT - 1][pX + 9] = 151;
-
-            for (idx = pX + 2; idx <= pX + 7; idx++)
-                WORLD_BACK[BACKWORLD_HEIGHT - 2][idx] = 152;
-            WORLD_BACK[BACKWORLD_HEIGHT - 2][pX + 1] = 150;
-            WORLD_BACK[BACKWORLD_HEIGHT - 2][pX + 8] = 151;
-
-            for (idx = pX + 3; idx <= pX + 6; idx++)
-                WORLD_BACK[BACKWORLD_HEIGHT - 3][idx] = 152;
-            WORLD_BACK[BACKWORLD_HEIGHT - 3][pX + 2] = 150;
-            WORLD_BACK[BACKWORLD_HEIGHT - 3][pX + 7] = 151;
-
-            WORLD_BACK[BACKWORLD_HEIGHT - 4][pX + 3] = 153;
-        }
-        montI += (10 + random(10));
-    }
-
-    //Montagnes petites
-    montI = random(8);
-    while (montI < (BACKWORLD_WIDTH - 7))
-    {
-        int pX = montI;
-        if (random(10) < 6)
-        {
-            int idx = 0;
-
-            for (idx = pX + 1; idx <= pX + 6; idx++)
-                WORLD_BACK[BACKWORLD_HEIGHT - 1][idx] = 152;
-            WORLD_BACK[BACKWORLD_HEIGHT - 1][pX] = 150;
-            WORLD_BACK[BACKWORLD_HEIGHT - 1][pX + 7] = 151;
-
-            for (idx = pX + 2; idx <= pX + 5; idx++)
-                WORLD_BACK[BACKWORLD_HEIGHT - 2][idx] = 152;
-            WORLD_BACK[BACKWORLD_HEIGHT - 2][pX + 1] = 150;
-            WORLD_BACK[BACKWORLD_HEIGHT - 2][pX + 6] = 151;
-
-            WORLD_BACK[BACKWORLD_HEIGHT - 3][pX + 2] = 153;
-        }
-        montI += (7 + random(10));
-    }
-    //nuages
-    montI = random(10);
-    while (montI < (BACKWORLD_WIDTH - 10))
-    {
-        int pX = montI;
-        int vam = random(10);
-        if (vam < 2)
-        {
-            WORLD_BACK[1 + random(3)][pX] = 140;
-        }
-        else if (vam < 5)
-        {
-            WORLD_BACK[1 + random(3)][pX + 4] = 144;
-        }
-        montI += (4 + random(6));
-    }
-#endif
-  //  StopMOD();
-  //  PlayMOD(pmf_ninja);
+    StopMOD();
+    PlayMOD(pmf_ninja);
 }
 
 void drawPlayer()
@@ -1027,6 +989,7 @@ void drawPlayer()
         anim_player_walk();
         break;
     case PLAYER_STATE_JUMP:
+    case PLAYER_STATE_DOUBLE_JUMP:
         anim_player_jump();
         break;
     case PLAYER_STATE_FALL:
@@ -1071,6 +1034,17 @@ void drawPlayer()
         anim_player_idle();
         break;
     }
+    switch (Player.FX.stateAnim)
+    {
+    case FX_NONE:
+
+        break;
+    case FX_DOUBLE_JUMP:
+    {
+        anim_player_fx_double_jump();
+        break;
+    }
+    }
 }
 
 void createItem(int wX, int wY, uint8_t type)
@@ -1087,7 +1061,7 @@ void createItem(int wX, int wY, uint8_t type)
     ITEMS[CURRENT_QUEUE_ITEMS].speed_x = 0;
     ITEMS[CURRENT_QUEUE_ITEMS].speed_y = 0;
     ITEMS[CURRENT_QUEUE_ITEMS].max_frames = 1;
-    ITEMS[CURRENT_QUEUE_ITEMS].max_anim = 1;
+    ITEMS[CURRENT_QUEUE_ITEMS].nb_anim_frames = 0;
 
     CURRENT_QUEUE_ITEMS++;
     //On boucle sur la liste des items
@@ -1102,12 +1076,11 @@ void createItem(int wX, int wY, uint8_t type)
     }
     else
         NB_WORLD_ITEMS++;
-
 }
 
 void killItem(Titem *currentItem, int px, int py)
 {
-    currentItem->bIsAlive = 64;
+    currentItem->bIsAlive = 4;
 
     //parts.createExplosion(px - cameraX, py - cameraY, 16);
 }
@@ -1116,18 +1089,18 @@ void drawItem(Titem *currentItem)
 {
     if (currentItem->current_framerate == currentItem->max_frames)
     {
-        currentItem->anim++;
+        currentItem->anim_frame++;
         currentItem->current_framerate = 0;
     }
     currentItem->current_framerate++;
 
-    if (currentItem->anim > currentItem->max_anim)
+    if (currentItem->anim_frame > currentItem->nb_anim_frames)
     {
-        currentItem->anim = 0;
+        currentItem->anim_frame = 1;
     }
     if (currentItem->bIsAlive < 127)
     {
-        currentItem->anim = 3;
+        //Il va disparaitre apres quelques frames, ca nous laisse le temps de faire un effet de disparition eventuel
         currentItem->bIsAlive -= 4;
     }
 
@@ -1212,18 +1185,19 @@ void drawEnnemy(Tennemy *currentEnnemy)
 
     if (currentEnnemy->current_framerate == currentEnnemy->max_frames)
     {
-        currentEnnemy->anim++;
+        currentEnnemy->anim_frame++;
         currentEnnemy->current_framerate = 0;
     }
     currentEnnemy->current_framerate++;
 
-    if (currentEnnemy->anim > currentEnnemy->max_anim)
+    if (currentEnnemy->anim_frame > currentEnnemy->nb_anim_frames)
     {
-        currentEnnemy->anim = 1;
+        currentEnnemy->anim_frame = 1;
     }
     if (currentEnnemy->bIsAlive < 127)
     {
-        currentEnnemy->anim = currentEnnemy->max_anim + 1;
+        //On fixe a la frames + 1 (dans le case du drraw on dessinera la frame "dying" )
+        currentEnnemy->anim_frame = currentEnnemy->nb_anim_frames + 1;
         currentEnnemy->bIsAlive -= 4;
     }
 
@@ -1235,35 +1209,43 @@ void drawEnnemy(Tennemy *currentEnnemy)
     {
         switch (currentEnnemy->type)
         {
-        case SPIDER_ENNEMY:
-            switch (currentEnnemy->anim)
+            case SPIDER_ENNEMY:
             {
-            case 1:
-                drawSprite(px, py, spider_walk1.width, spider_walk1.height, spider_walk1.pixel_data, 1);
-                break;
-            case 2:
-                drawSprite(px, py, spider_walk2.width, spider_walk2.height, spider_walk2.pixel_data, 1);
+                switch (currentEnnemy->anim_frame)
+                {
+                    case 1:
+                        drawSprite(px, py, spider_walk1.width, spider_walk1.height, spider_walk1.pixel_data, 1);
+                        break;
+                    case 2:
+                        drawSprite(px, py, spider_walk2.width, spider_walk2.height, spider_walk2.pixel_data, 1);
+                        break;
+                }
                 break;
             }
-            break;
-
-        case ZOMBI_ENNEMY:
-        {
-            int DIR = currentEnnemy->speed_x > 0 ? 1 : -1;
-            switch (currentEnnemy->anim)
+            case ZOMBI_ENNEMY:
             {
-            case 1:
-                drawSprite(px, py, zombi_walk1.width, zombi_walk1.height, zombi_walk1.pixel_data, DIR);
-                break;
-            case 2:
-                drawSprite(px, py, zombi_walk2.width, zombi_walk2.height, zombi_walk2.pixel_data, DIR);
-                break;
-            case 3:
-                drawSprite(px, py, zombi_walk3.width, zombi_walk3.height, zombi_walk3.pixel_data, DIR);
+                int DIR = currentEnnemy->speed_x > 0 ? 1 : -1;
+                switch (currentEnnemy->anim_frame)
+                {
+                    case 1:
+                        drawSprite(px, py, zombi_walk1.width, zombi_walk1.height, zombi_walk1.pixel_data, DIR);
+                        break;
+                    case 2:
+                        drawSprite(px, py, zombi_walk2.width, zombi_walk2.height, zombi_walk2.pixel_data, DIR);
+                        break;
+                    case 3:
+                        drawSprite(px, py, zombi_walk3.width, zombi_walk3.height, zombi_walk3.pixel_data, DIR);
+                        break;
+                }
                 break;
             }
-            break;
         }
+        if (currentEnnemy->bIsAlive >= 127)
+        {
+            int lgHealth = int(14 * currentEnnemy->health / currentEnnemy->max_health);
+            canvas->drawFastHLine(px+1, py-4, lgHealth, lgHealth < 8 ? 0xC180 : 0xAE6A);
+            canvas->drawFastHLine(px+1, py-3, lgHealth, lgHealth < 8 ? 0x8940 : 0x5C64);
+            canvas->drawRect(px, py-5, 16, 4, ARCADA_BLACK);
         }
     }
 }
@@ -1286,61 +1268,12 @@ void drawEnnemies()
 
 void drawTiles()
 {
-    int currentOffset_X_BACK = (cameraX / 4) % 8;
-    int worldX_BACK = (cameraX / 4) / 8;
-
-    int worldMIN_BACK = min(worldX_BACK, (BACKWORLD_WIDTH - 1) - (ARCADA_TFT_WIDTH / 8));
-    int worldMAX_BACK = worldMIN_BACK + 1 + (ARCADA_TFT_WIDTH / 8);
     int playerLightX = Player.pos.worldX;
     int playerLightY = Player.pos.worldY;
-//    int playerLightX = (Player.pos.pX + 8) - cameraX;
-//    int playerLightY = (Player.pos.pY + 8) - cameraY;
 
-    /*    for (int wY = 0; wY < BACKWORLD_HEIGHT; wY++)
-    {
-        int py = wY * 8;
-        if (py < -8)
-            continue;
-        else if (py > SCREEN_HEIGHT)
-            break;
-
-        for (int wX = worldMIN_BACK; wX < worldMAX_BACK; wX++)
-        {
-            int px = ((wX - worldMIN_BACK) * 8) - currentOffset_X_BACK;
-            if ((px < (ARCADA_TFT_WIDTH - 1)) && (px > -8))
-            {
-
-                if (WORLD_BACK[wY][wX] == 140) //
-                {
-                    drawSprite(px, wY * 8, cloud1_32x24.width, cloud1_32x24.height, cloud1_32x24.pixel_data, 1);
-                }
-                else if (WORLD_BACK[wY][wX] == 144) //
-                {
-                    drawSprite(px, wY * 8, cloud2_32x24.width, cloud2_32x24.height, cloud2_32x24.pixel_data, 1);
-                }
-                else if (WORLD_BACK[wY][wX] == 150) //
-                {
-                    drawSprite(px, wY * 8, montagne_left_8x8.width, montagne_left_8x8.height, montagne_left_8x8.pixel_data, 1);
-                }
-                else if (WORLD_BACK[wY][wX] == 151) //
-                {
-                    drawSprite(px, wY * 8, montagne_right_8x8.width, montagne_right_8x8.height, montagne_right_8x8.pixel_data, 1);
-                }
-                else if (WORLD_BACK[wY][wX] == 152) //
-                {
-                    drawSprite(px, wY * 8, montagne_middle_8x8.width, montagne_middle_8x8.height, montagne_middle_8x8.pixel_data, 1);
-                }
-                else if (WORLD_BACK[wY][wX] == 153) //
-                {
-                    drawSprite(px, wY * 8, montagne_top_32x8.width, montagne_top_32x8.height, montagne_top_32x8.pixel_data, 1);
-                }
-            }
-        }
-    }
-*/
     for (int wX = worldMIN_X; wX < worldMAX_X; wX++)
     {
-        int profondeurColonne = WORLD[HEADER_ROW][wX];
+        int profondeurColonne = WORLD[HEADER_ROW][wX].id;
 
         int px = ((wX - worldMIN_X) * 16) - currentOffset_X;
         if ((px < ARCADA_TFT_WIDTH) && (px > -16))
@@ -1350,7 +1283,7 @@ void drawTiles()
                 int py = ((wY - worldMIN_Y) * 16) - currentOffset_Y;
                 if ((py < ARCADA_TFT_HEIGHT) && (py > -16))
                 {
-                    uint8_t value = WORLD[wY][wX];
+                    uint8_t value = WORLD[wY][wX].id;
 
                     int curLight = MAX_LIGHT_INTENSITY;
 
@@ -1378,7 +1311,6 @@ void drawTiles()
 #ifdef DEBUG
                     curLight = MAX_LIGHT_INTENSITY;
 #endif
-
 
                     if (value == 0)
                     {
@@ -1434,7 +1366,7 @@ void drawTiles()
                     {
                         drawTile(px, py, rock_redstone.pixel_data, curLight);
                     }
-                    else if (value == 0x60) //
+                    /*                    else if (value == 0x60) //
                     {
                         drawSprite(px, py, grass_left_8x8.width, grass_left_8x8.height, grass_left_8x8.pixel_data, 1, curLight);
                     }
@@ -1446,16 +1378,7 @@ void drawTiles()
                     {
                         drawSprite(px, py, grass_right_8x8.width, grass_right_8x8.height, grass_right_8x8.pixel_data, 1, curLight);
                     }
-                    else if (value == 0x63)
-                    {
-                        //          drawXbm(px, py, tree_bl_width, tree_bl_height, tree_bl_bits, ARCADA_GREEN);
-                        drawSprite(px, py, tree_bottom_8x8.width, tree_bottom_8x8.height, tree_bottom_8x8.pixel_data, 1, curLight);
-                    }
-                    else if (value == 0x64)
-                    {
-                        //          drawXbm(px, py, tree_tl_width, tree_tl_height, tree_tl_bits, ARCADA_GREEN);
-                        drawSprite(px, py, tree_top_8x8.width, tree_top_8x8.height, tree_top_8x8.pixel_data, 1, curLight);
-                    }
+                    */
                     else
                     {
                         drawTile(px, py, rock_empty.pixel_data, curLight);
@@ -1465,7 +1388,7 @@ void drawTiles()
                         canvas->fillRect(px, py, 16, 16, rgbTo565(R, G, B));*/
                     }
                     /*
-                    else if (WORLD[wY][wX] == 'o') //16 coin
+                    else if (WORLD[wY][wX].id == 'o') //16 coin
                     {
                         int currentCoinFrame = (briquesFRAMES / 5) % 4;
                         unsigned char *bitmap = (unsigned char *)coin_8x8.pixel_data;
@@ -1486,7 +1409,6 @@ void drawTiles()
                         }
                         drawSprite(px, py, coin4_8x8.width, coin4_8x8.height, (const unsigned char *)bitmap, 1);
                     }*/
-
                 }
             }
         }
@@ -1611,8 +1533,16 @@ void drawHud()
             ///draw Item sprite
         }
     }
-
     //Health / Magie...
+    int lgHealth = 30 * Player.health / Player.max_health;
+
+    canvas->fillRect(2, 2, lgHealth, 3, lgHealth < 8 ? 0xC180 : 0xAE6A);
+    canvas->fillRect(2, 5, lgHealth, 3, lgHealth < 8 ? 0x8940 : 0x5C64);
+    canvas->drawRect(1, 1, 32, 8, ARCADA_BLACK);
+        
+    arcada.pixels.setPixelColor(4, 0x00FF00);
+    //    arcada.pixels.setPixelColor(4, 0x00FF00);
+    arcada.pixels.show();
 }
 
 void drawWorld()
@@ -1638,23 +1568,25 @@ void pixelToWorld(int *pX, int *pY)
     int wY = *pY / 16;
 }
 
-uint8_t checkCollisionTo(int x, int y, int newX, int newY)
+TworldTile checkCollisionTo(int x, int y, int newX, int newY)
 {
+    TworldTile res = {0};
+
     for (int wX = x; wX <= newX; wX++)
     {
         for (int wY = y; wY <= newY; wY++)
         {
-            uint8_t value = WORLD[wY][wX];
-            if (value != 0 && value != 0x7F)
+            TworldTile value = WORLD[wY][wX];
+            if (value.id != 0 && value.id != 0x7F)
             {
                 return value;
             }
         }
     }
-    return 0;
+    return res;
 }
 
-int checkCollisionAt(int newX, int newY)
+TworldTile checkCollisionAt(int newX, int newY)
 {
     int check_worldX = newX / 16;
     int check_worldY = newY / 16;
@@ -1713,9 +1645,36 @@ void calculateWorldCoordinates()
     worldOffset_pY = (worldMIN_Y * 16) + currentOffset_Y;
 }
 
-void checkPlayerState()
+int playerPickupItem(Titem *currentItem){
+    int ret = 0;
+
+    //inventaire ?
+    ret = 1;
+
+    return ret;
+}
+
+void checkPlayerCollisionsEntities()
 {
-    //Deux briques SUR player
+    // Check for pickups!
+    /*
+		if (GetTile(fNewPlayerPosX + 0.0f, fNewPlayerPosY + 0.0f) == L'o')
+			SetTile(fNewPlayerPosX + 0.0f, fNewPlayerPosY + 0.0f, L'.');
+
+		if (GetTile(fNewPlayerPosX + 0.0f, fNewPlayerPosY + 1.0f) == L'o')
+			SetTile(fNewPlayerPosX + 0.0f, fNewPlayerPosY + 1.0f, L'.');
+
+		if (GetTile(fNewPlayerPosX + 1.0f, fNewPlayerPosY + 0.0f) == L'o')
+			SetTile(fNewPlayerPosX + 1.0f, fNewPlayerPosY + 0.0f, L'.');
+
+		if (GetTile(fNewPlayerPosX + 1.0f, fNewPlayerPosY + 1.0f) == L'o')
+			SetTile(fNewPlayerPosX + 1.0f, fNewPlayerPosY + 1.0f, L'.');
+            
+        uint8_t tileTL = getWorldAtPix(Player.pos.newX, Player.pos.pY);
+        uint8_t tileBL = getWorldAtPix(Player.pos.newX, Player.pos.pY + 15);
+
+*/
+    //Deux briques SUR player ?
     brique_PLAYER = getWorldAt(Player.pos.worldX, Player.pos.worldY);
 
     //Au dessus
@@ -1727,7 +1686,7 @@ void checkPlayerState()
 
     //Devant
     brique_FRONT = getWorldAt(Player.pos.XFront, Player.pos.worldY);
-
+    /*
     switch (brique_PLAYER)
     {
     case 'o':
@@ -1741,15 +1700,15 @@ void checkPlayerState()
         set_wining();
         return;
     }
-
+*/
     //Collisions mushrooms
     for (int itC = 0; itC < NB_WORLD_ITEMS; itC++)
     {
         Titem *currentItem = &ITEMS[itC];
         if ((currentItem->bIsAlive > 127) && currentItem->bIsActive)
         {
-            if (((currentItem->worldX >= (worldMIN_X - 1)) && (currentItem->worldX <= (worldMAX_X + 1))) &&
-                ((currentItem->worldY >= (worldMIN_Y - 1)) && (currentItem->worldY <= (worldMAX_Y + 1))))
+            //       if (((currentItem->worldX >= (worldMIN_X - 1)) && (currentItem->worldX <= (worldMAX_X + 1))) &&
+            //           ((currentItem->worldY >= (worldMIN_Y - 1)) && (currentItem->worldY <= (worldMAX_Y + 1))))
             {
 
                 int px = currentItem->x;
@@ -1762,9 +1721,18 @@ void checkPlayerState()
                     py + 16 > Player.pos.pY)
                 {
                     //  Serial.println("Collision.");
-                    //          sndPlayerCanal1.play(AudioSamplePlayershell);
-                    SCORE += 50;
-                    killItem(currentItem, px, py);
+                    //On ajoute dans l'inventaire
+
+                    if (playerPickupItem(currentItem))
+                    {
+                        sndPlayerCanal2.play(AudioSample__ItemPickup);
+                        killItem(currentItem, px, py);
+                    }
+                    else
+                    {
+                        //On le fait disparaitre doucement ?
+                    }
+
                     //EFFECT
                     //...
                 }
@@ -1772,15 +1740,14 @@ void checkPlayerState()
         }
     }
 
-    bool bRebond = false;
     //Collisions ennemis
     for (int enC = 0; enC < NB_WORLD_ENNEMIES; enC++)
     {
         Tennemy *currentEnnemy = &ENNEMIES[enC];
         if (currentEnnemy->bIsAlive > 127)
         {
-            if (((currentEnnemy->worldX >= (worldMIN_X - 1)) && (currentEnnemy->worldX <= (worldMAX_X + 1))) &&
-                ((currentEnnemy->worldY >= (worldMIN_Y - 1)) && (currentEnnemy->worldY <= (worldMAX_Y + 1))))
+            //  if (((currentEnnemy->worldX >= (worldMIN_X - 1)) && (currentEnnemy->worldX <= (worldMAX_X + 1))) &&
+            //      ((currentEnnemy->worldY >= (worldMIN_Y - 1)) && (currentEnnemy->worldY <= (worldMAX_Y + 1))))
             {
 
                 int px = currentEnnemy->x;
@@ -1793,15 +1760,13 @@ void checkPlayerState()
                     py + 14 > Player.pos.pY)
                 {
                     //  Serial.println("Collision.");
-                    if (Player.bFalling || bRebond)
+                    if (Player.bFalling)
                     {
                         //            sndPlayerCanal1.play(AudioSamplePlayershell);
                         SCORE += 5;
                         killEnnemy(currentEnnemy, px, py);
                         //rebond
-                        set_jumping();
-                        jumpPhase = 6;
-                        bRebond = true;
+                        Player.pos.speedY = JUMP_SPEED / 3;
                     }
                     else
                     {
@@ -1835,7 +1800,7 @@ void updatePlayer()
     {
         calculatePlayerCoords();
 
-        if ((brique_FRONT == 0 || brique_FRONT == BLOCK_UNDERGROUND_AIR) &&
+        if ((brique_FRONT.id == 0 || brique_FRONT.id == BLOCK_UNDERGROUND_AIR) &&
             ((Player.pos.direction > 0 && (Player.pos.pX < ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH)) ||
              (Player.pos.direction < 0 && (Player.pos.pX >= 2))))
         {
@@ -1877,6 +1842,8 @@ void updatePlayer()
         updatePlayerPosition();
 
         checkPlayerCollisionsWorld();
+
+        checkPlayerCollisionsEntities();
 #endif
 
         //Position player
@@ -1889,7 +1856,7 @@ void updatePlayer()
 
 void computePlayerAnimations()
 {
-    //Serial.printf("counterActionB:%d Player.bJumping:%d Player.bFalling:%d bOnGround:%d bDoWalk:%d Player.bMoving:%d\n", counterActionB, Player.bJumping, Player.bFalling, bOnGround, bDoWalk, Player.bMoving);
+    //Serial.printf("counterActionB:%d Player.bJumping:%d Player.bFalling:%d bOnGround:%d Player.bWantWalk:%d Player.bMoving:%d\n", counterActionB, Player.bJumping, Player.bFalling, bOnGround, Player.bWantWalk, Player.bMoving);
     if (counterActionB > 0)
     {
         //@todo : Test type action,
@@ -1910,7 +1877,7 @@ void computePlayerAnimations()
         {
             if (Player.bOnGround)
             {
-                if (bDoWalk) // demannde de deplacement)
+                if (Player.bWantWalk) // demannde de deplacement)
                 {
                     if (Player.bMoving) //On a bougé
                     {
@@ -1993,9 +1960,9 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     //X
     if (currentEnnemy->speed_x <= 0)
     {
-        uint8_t tileTL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y);
-        uint8_t tileBL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y + 15);
-        if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileTL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y);
+        TworldTile tileBL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y + 15);
+        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR))
         {
             currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16)) + 16;
             currentEnnemy->speed_x = -currentEnnemy->speed_x;
@@ -2003,9 +1970,9 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     }
     else
     {
-        uint8_t tileTR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y);
-        uint8_t tileBR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y + 15);
-        if ((tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileTR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y);
+        TworldTile tileBR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y + 15);
+        if ((tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
         {
             currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16));
             currentEnnemy->speed_x = -currentEnnemy->speed_x;
@@ -2014,12 +1981,13 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     //Y
     currentEnnemy->bOnGround = false;
     currentEnnemy->bJumping = false;
+    currentEnnemy->bFalling = false;
     if (currentEnnemy->speed_y <= 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        uint8_t tileTL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y);
-        uint8_t tileTR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y);
-        if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileTL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y);
+        TworldTile tileTR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y);
+        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR))
         {
             currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16)) + 16;
             currentEnnemy->speed_y = 0;
@@ -2033,9 +2001,9 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     {
         currentEnnemy->bFalling = true;
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        uint8_t tileBL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y + 16);
-        uint8_t tileBR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y + 16);
-        if ((tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileBL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y + 16);
+        TworldTile tileBR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y + 16);
+        if ((tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
         {
             currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16));
             currentEnnemy->bOnGround = true;
@@ -2153,12 +2121,13 @@ void checkItemCollisionsWorld(Titem *currentItem)
     //Y
     currentItem->bOnGround = false;
     currentItem->bJumping = false;
+    currentItem->bFalling = false;
     if (currentItem->speed_y <= 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        uint8_t tileTL = getWorldAtPix(currentItem->x + 0, currentItem->new_y);
-        uint8_t tileTR = getWorldAtPix(currentItem->x + 15, currentItem->new_y);
-        if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileTL = getWorldAtPix(currentItem->x + 0, currentItem->new_y);
+        TworldTile tileTR = getWorldAtPix(currentItem->x + 15, currentItem->new_y);
+        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR))
         {
             currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16)) + 16;
             currentItem->speed_y = 0;
@@ -2172,9 +2141,9 @@ void checkItemCollisionsWorld(Titem *currentItem)
     {
         currentItem->bFalling = true;
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        uint8_t tileBL = getWorldAtPix(currentItem->x + 0, currentItem->new_y + 16);
-        uint8_t tileBR = getWorldAtPix(currentItem->x + 15, currentItem->new_y + 16);
-        if ((tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileBL = getWorldAtPix(currentItem->x + 0, currentItem->new_y + 16);
+        TworldTile tileBR = getWorldAtPix(currentItem->x + 15, currentItem->new_y + 16);
+        if ((tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
         {
             currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16));
             currentItem->bOnGround = true;
@@ -2216,7 +2185,7 @@ void updatePlayerVelocities()
 
 void updatePlayerPosition()
 {
-    //if (bDoWalk)
+    //if (Player.bWantWalk)
     {
         //CHECK COLLISION a refaire propre
         if (Player.pos.speedX > 0)
@@ -2243,9 +2212,9 @@ void checkPlayerCollisionsWorld()
     //X
     if (Player.pos.speedX <= 0)
     {
-        uint8_t tileTL = getWorldAtPix(Player.pos.newX, Player.pos.pY);
-        uint8_t tileBL = getWorldAtPix(Player.pos.newX, Player.pos.pY + 15);
-        if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileTL = getWorldAtPix(Player.pos.newX, Player.pos.pY);
+        TworldTile tileBL = getWorldAtPix(Player.pos.newX, Player.pos.pY + 15);
+        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR))
         {
             Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + 16;
             Player.pos.speedX = 0;
@@ -2253,9 +2222,9 @@ void checkPlayerCollisionsWorld()
     }
     else
     {
-        uint8_t tileTR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY);
-        uint8_t tileBR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY + 15);
-        if ((tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileTR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY);
+        TworldTile tileBR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY + 15);
+        if ((tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
         {
             Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16));
             Player.pos.speedX = 0;
@@ -2264,12 +2233,13 @@ void checkPlayerCollisionsWorld()
     //Y
     Player.bOnGround = false;
     Player.bJumping = false;
+    Player.bFalling = false;
     if (Player.pos.speedY <= 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        uint8_t tileTL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY);
-        uint8_t tileTR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY);
-        if ((tileTL != BLOCK_AIR && tileTL != BLOCK_UNDERGROUND_AIR) || (tileTR != BLOCK_AIR && tileTR != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileTL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY);
+        TworldTile tileTR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY);
+        if ((tileTL.id != BLOCK_AIR && tileTL.id != BLOCK_UNDERGROUND_AIR) || (tileTR.id != BLOCK_AIR && tileTR.id != BLOCK_UNDERGROUND_AIR))
         {
             Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16)) + 16;
             Player.pos.speedY = 0;
@@ -2283,16 +2253,14 @@ void checkPlayerCollisionsWorld()
     {
         Player.bFalling = true;
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        uint8_t tileBL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY + 16);
-        uint8_t tileBR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY + 16);
-        if ((tileBL != BLOCK_AIR && tileBL != BLOCK_UNDERGROUND_AIR) || (tileBR != BLOCK_AIR && tileBR != BLOCK_UNDERGROUND_AIR))
+        TworldTile tileBL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY + 16);
+        TworldTile tileBR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY + 16);
+        if ((tileBL.id != BLOCK_AIR && tileBL.id != BLOCK_UNDERGROUND_AIR) || (tileBR.id != BLOCK_AIR && tileBR.id != BLOCK_UNDERGROUND_AIR))
         {
             Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16));
             Player.bOnGround = true;
             Player.bFalling = false;
             Player.pos.speedY = 0;
-            bDoJump = false;
-            bDoDoubleJump = false;
         }
     }
 
@@ -2302,7 +2270,9 @@ void checkPlayerCollisionsWorld()
 
 void checkPlayerInputs()
 {
-    bDoWalk = false;
+    Player.bWantJump = false;
+    Player.bWantDoubleJump = false;
+    Player.bWantWalk = false;
 
     if (just_pressed & ARCADA_BUTTONMASK_SELECT)
     {
@@ -2380,25 +2350,22 @@ void checkPlayerInputs()
 
         if (counterActionB >= FRAMES_ACTION_B) //Action (pour le moment minage seulement)
         {
-            uint8_t value = 0xFF;
-            //DIG bDoJump = true;
-            //Thrust
+            TworldTile value = getWorldAt(Player.cible_wX, Player.cible_wY);
+
             counterActionB = 0;
             coolDownActionB = FRAMES_COOLDOWN_B;
             lastCibleX = lastCibleY = 0;
 
-            value = getWorldAt(Player.cible_wX, Player.cible_wY);
-
             //Serial.printf("Dig:%d,%d v:%d\n", Player.cible_wX, Player.cible_wY, value);
-            if (value != BLOCK_AIR && value != BLOCK_UNDERGROUND_AIR && Player.pos.YDown < (WORLD_HEIGHT - 1))
+            if (value.id != BLOCK_AIR && value.id != BLOCK_UNDERGROUND_AIR && Player.pos.YDown < (WORLD_HEIGHT - 1))
             {
                 // @todo span item ramassable ? ou tile ramassable ?
-                createItem(Player.cible_wX, Player.cible_wY, value);
+                createItem(Player.cible_wX, Player.cible_wY, value.id);
 
-                if (value < BLOCK_ROCK)
-                    value = BLOCK_AIR;
+                if (value.id < BLOCK_ROCK)
+                    value.id = BLOCK_AIR;
                 else
-                    value = BLOCK_UNDERGROUND_AIR;
+                    value.id = BLOCK_UNDERGROUND_AIR;
 
                 // @todo : tester le type de value
                 sndPlayerCanal1.play(AudioSampleRock_break);
@@ -2426,25 +2393,29 @@ void checkPlayerInputs()
         {
             if (Player.pos.speedY == 0 && Player.bOnGround)
             {
-                bDoJump = true;
+                Player.bWantJump = true;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
                 Player.pos.speedY = -JUMP_SPEED;
+                //Spawn Effect
+                set_double_jump_fx();
             }
-            else if (!bDoDoubleJump && !Player.bOnGround && Player.pos.speedY < FALLING_SPEED)
+            else if (!Player.bOnGround && Player.pos.speedY < FALLING_SPEED)
             {
                 // @todo spawn dust double jump
-                bDoDoubleJump = true;
+                Player.bWantDoubleJump = true;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
                 Player.pos.speedY = -DOUBLE_JUMP_SPEED;
+                //Spawn Effect
+                set_double_jump_fx();
             }
         }
 
         if (pressed_buttons & ARCADA_BUTTONMASK_LEFT)
         {
             Player.pos.direction = -1;
-            bDoWalk = true;
+            Player.bWantWalk = true;
             if (Player.bOnGround)
                 Player.pos.speedX += -RUNNING_SPEED;
             else
@@ -2458,7 +2429,7 @@ void checkPlayerInputs()
         else if (pressed_buttons & ARCADA_BUTTONMASK_RIGHT)
         {
             Player.pos.direction = 1;
-            bDoWalk = true;
+            Player.bWantWalk = true;
             if (Player.bOnGround)
                 Player.pos.speedX += RUNNING_SPEED;
             else
@@ -2482,10 +2453,12 @@ void updateGame()
         count_player_die++;
         if (count_player_die >= PLAYER_DIE_FRAMES)
         {
-            //On affiche gameover et on quitte
+            // @todo : On affiche gameover et on quitte
             initGame();
         }
         updatePlayer();
+        updateEnnemies();
+        updateItems();
     }
     else if (bWin)
     {
@@ -2743,7 +2716,7 @@ bool LoadGame(uint8_t numEmplacement)
                 buff[3] = 0;
                 data.read(); // ,
                 int value = strtol(buff, 0, 10);
-                WORLD[wY][wX] = (uint8_t)value;
+                WORLD[wY][wX].id = (uint8_t)value;
             }
         }
         data.read(); //  ]
@@ -2776,7 +2749,7 @@ bool SaveGame(uint8_t numEmplacement)
         {
             for (int wX = 0; wX < WORLD_WIDTH; wX++)
             {
-                uint8_t value = WORLD[wY][wX];
+                uint8_t value = WORLD[wY][wX].id;
                 char buff[5];
                 sprintf(buff, "%03d,", value);
                 data.write(buff[0]);
@@ -2898,24 +2871,23 @@ void loop()
     //elapsedTime = millis() - now;
 
     //Serial.printf("E:%d LFD:%d\n", elapsedTime, lastFrameDurationMs);
-
 }
 
 void anim_player_idle()
 {
     if (Player.current_framerate == PLAYER_FRAMERATE_IDLE)
     {
-        Player.anim++;
+        Player.anim_frame++;
         Player.current_framerate = 0;
     }
     Player.current_framerate++;
 
-    if (Player.anim > PLAYER_FRAME_IDLE_3)
+    if (Player.anim_frame > PLAYER_FRAME_IDLE_3)
     {
-        Player.anim = PLAYER_FRAME_IDLE_1;
+        Player.anim_frame = PLAYER_FRAME_IDLE_1;
     }
 
-    switch (Player.anim)
+    switch (Player.anim_frame)
     {
     case PLAYER_FRAME_IDLE_1:
         drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_idle1.width, player_idle1.height, player_idle1.pixel_data, Player.pos.direction);
@@ -2933,17 +2905,17 @@ void anim_player_digging()
 {
     if (Player.current_framerate == PLAYER_FRAMERATE_ACTION)
     {
-        Player.anim++;
+        Player.anim_frame++;
         Player.current_framerate = 0;
     }
     Player.current_framerate++;
 
-    if (Player.anim > PLAYER_FRAME_ACTION_4)
+    if (Player.anim_frame > PLAYER_FRAME_ACTION_4)
     {
-        Player.anim = PLAYER_FRAME_ACTION_1;
+        Player.anim_frame = PLAYER_FRAME_ACTION_1;
     }
 
-    switch (Player.anim)
+    switch (Player.anim_frame)
     {
     case PLAYER_FRAME_ACTION_1:
         drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action1.width, player_action1.height, player_action1.pixel_data, Player.pos.direction);
@@ -2965,17 +2937,17 @@ void anim_player_walk()
 {
     if (Player.current_framerate == PLAYER_FRAMERATE_WALK)
     {
-        Player.anim++;
+        Player.anim_frame++;
         Player.current_framerate = 0;
     }
     Player.current_framerate++;
 
-    if (Player.anim > PLAYER_FRAME_WALK_6)
+    if (Player.anim_frame > PLAYER_FRAME_WALK_6)
     {
-        Player.anim = PLAYER_FRAME_WALK_1;
+        Player.anim_frame = PLAYER_FRAME_WALK_1;
     }
 
-    switch (Player.anim)
+    switch (Player.anim_frame)
     {
     case PLAYER_FRAME_WALK_1:
         drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk1.width, player_walk1.height, player_walk1.pixel_data, Player.pos.direction);
@@ -3001,20 +2973,19 @@ void anim_player_walk()
 
 void anim_player_jump()
 {
-
     if (Player.current_framerate == PLAYER_FRAMERATE_JUMP)
     {
-        Player.anim++;
+        Player.anim_frame++;
         Player.current_framerate = 0;
     }
     Player.current_framerate++;
 
-    if (Player.anim > PLAYER_FRAME_JUMP_3)
+    if (Player.anim_frame > PLAYER_FRAME_JUMP_5)
     {
-        Player.anim = PLAYER_FRAME_JUMP_3; //On reste sur 3
+        Player.anim_frame = PLAYER_FRAME_JUMP_5; //On reste sur 5
     }
 
-    switch (Player.anim)
+    switch (Player.anim_frame)
     {
     case PLAYER_FRAME_JUMP_1:
         drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump1.width, player_jump1.height, player_jump1.pixel_data, Player.pos.direction);
@@ -3025,6 +2996,12 @@ void anim_player_jump()
     case PLAYER_FRAME_JUMP_3:
         drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump3.width, player_jump3.height, player_jump3.pixel_data, Player.pos.direction);
         break;
+    case PLAYER_FRAME_JUMP_4:
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump4.width, player_jump4.height, player_jump4.pixel_data, Player.pos.direction);
+        break;
+    case PLAYER_FRAME_JUMP_5:
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump5.width, player_jump5.height, player_jump5.pixel_data, Player.pos.direction);
+        break;
     }
 }
 
@@ -3033,17 +3010,17 @@ void anim_player_falling()
 
     if (Player.current_framerate == PLAYER_FRAMERATE_FALLING)
     {
-        Player.anim++;
+        Player.anim_frame++;
         Player.current_framerate = 0;
     }
     Player.current_framerate++;
 
-    if (Player.anim > PLAYER_FRAME_FALLING_1)
+    if (Player.anim_frame > PLAYER_FRAME_FALLING_1)
     {
-        Player.anim = PLAYER_FRAME_FALLING_1; //On reste sur 1
+        Player.anim_frame = PLAYER_FRAME_FALLING_1; //On reste sur 1
     }
 
-    switch (Player.anim)
+    switch (Player.anim_frame)
     {
     case PLAYER_FRAME_FALLING_1:
         drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_falling1.width, player_falling1.height, player_falling1.pixel_data, Player.pos.direction);
@@ -3060,17 +3037,17 @@ void anim_player_dying()
 
     if (Player.current_framerate == PLAYER_FRAMERATE_DIE)
     {
-        Player.anim++;
+        Player.anim_frame++;
         Player.current_framerate = 0;
     }
     Player.current_framerate++;
 
-    if (Player.anim > PLAYER_FRAME_DIE_1)
+    if (Player.anim_frame > PLAYER_FRAME_DIE_1)
     {
-        Player.anim = PLAYER_FRAME_DIE_1;
+        Player.anim_frame = PLAYER_FRAME_DIE_1;
     }
     /*
-  switch (Player.anim)
+  switch (Player.anim_frame)
   {
   case PLAYER_FRAME_DIE_1:
     //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player_die_bits, Player.pos.direction);
@@ -3084,19 +3061,19 @@ void anim_player_wining()
 
     if (Player.current_framerate == PLAYER_FRAMERATE_WIN)
     {
-        Player.anim++;
+        Player.anim_frame++;
         Player.current_framerate = 0;
         if (random(5) == 0)
             parts.createExplosion(random(10, SCREEN_WIDTH - 10), 10 + (rand() % 2 * SCREEN_HEIGHT / 3), 100 + rand() % 50, random(65535));
     }
     Player.current_framerate++;
 
-    if (Player.anim > PLAYER_FRAME_WIN_3)
+    if (Player.anim_frame > PLAYER_FRAME_WIN_3)
     {
-        Player.anim = PLAYER_FRAME_WIN_1;
+        Player.anim_frame = PLAYER_FRAME_WIN_1;
     }
     /*
-  switch (Player.anim)
+  switch (Player.anim_frame)
   {
   case PLAYER_FRAME_WIN_1:
     //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player4, Player.pos.direction);
@@ -3112,6 +3089,42 @@ void anim_player_wining()
       drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_run2.width, player_run2.height, player_run2.pixel_data, Player.pos.direction);
     break;
   }*/
+}
+
+void anim_player_fx_double_jump()
+{
+    if (Player.FX.current_framerate == FX_FRAMERATE_DOUBLE_JUMP)
+    {
+        Player.FX.anim_frame++;
+        Player.FX.current_framerate = 0;
+    }
+    Player.FX.current_framerate++;
+
+    if (Player.FX.anim_frame > FX_FRAME_DOUBLE_JUMP_5)
+    {
+        //Annulation de l'anim
+        Player.FX.stateAnim = FX_NONE;
+        return;
+    }
+
+    switch (Player.FX.anim_frame)
+    {
+    case FX_FRAME_DOUBLE_JUMP_1:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY, fx_jump1.width, fx_jump1.height, fx_jump1.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_DOUBLE_JUMP_2:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY, fx_jump2.width, fx_jump2.height, fx_jump2.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_DOUBLE_JUMP_3:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY, fx_jump3.width, fx_jump3.height, fx_jump3.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_DOUBLE_JUMP_4:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY, fx_jump4.width, fx_jump4.height, fx_jump4.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_DOUBLE_JUMP_5:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY, fx_jump5.width, fx_jump5.height, fx_jump5.pixel_data, Player.FX.direction);
+        break;
+    }
 }
 
 void displayGame()
