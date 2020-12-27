@@ -108,7 +108,17 @@ typedef union {
   
   struct {
       uint8_t id;
-      uint8_t attr;
+      union {
+        struct {
+          uint8_t traversable:1;
+          uint8_t opaque:1;
+          //uint8_t animated:1;
+          uint8_t life:3;
+          uint8_t _spare:3;
+        } fields;
+        uint8_t raw;
+      } attr;
+      
   };
 
 } TworldTile;

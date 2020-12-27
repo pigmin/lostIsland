@@ -2720,7 +2720,25 @@ bool LoadGame(uint8_t numEmplacement)
             }
         }
         data.read(); //  ]
+
+        data.read(); // ,
         //read world infos
+        data.read(); // [
+        for (int wY = 0; wY < WORLD_HEIGHT + 2; wY++)
+        {
+            for (int wX = 0; wX < WORLD_WIDTH; wX++)
+            {
+                char buff[5];
+                buff[0] = data.read();
+                buff[1] = data.read();
+                buff[2] = data.read();
+                buff[3] = 0;
+                data.read(); // ,
+                int value = strtol(buff, 0, 10);
+                WORLD[wY][wX].attr.raw = (uint8_t)value;
+            }
+        }
+        data.read(); //  ]
 
         //data.read();
         data.close();
@@ -2759,7 +2777,23 @@ bool SaveGame(uint8_t numEmplacement)
             }
         }
         data.write(']');
-        //read world infos
+        data.write(',');
+        //write world infos
+        data.write('[');
+        for (int wY = 0; wY < WORLD_HEIGHT + 2; wY++)
+        {
+            for (int wX = 0; wX < WORLD_WIDTH; wX++)
+            {
+                uint8_t value = WORLD[wY][wX].attr.raw;
+                char buff[5];
+                sprintf(buff, "%03d,", value);
+                data.write(buff[0]);
+                data.write(buff[1]);
+                data.write(buff[2]);
+                data.write(buff[3]);
+            }
+        }
+        data.write(']');
 
         data.flush();
         data.close();
