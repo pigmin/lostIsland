@@ -75,14 +75,18 @@
 
 #define  FX_NONE           0
 #define  FX_DOUBLE_JUMP    1
+#define  FX_DUST           2
 
 #define FX_FRAME_DOUBLE_JUMP_1  0
 #define FX_FRAME_DOUBLE_JUMP_2  1
 #define FX_FRAME_DOUBLE_JUMP_3  2
 #define FX_FRAME_DOUBLE_JUMP_4  3
 #define FX_FRAME_DOUBLE_JUMP_5  4
-
 const int FX_FRAMERATE_DOUBLE_JUMP = 2;
+
+
+#define FX_FRAME_DUST_1  0
+const int FX_FRAMERATE_DUST = 4;
 
 
 

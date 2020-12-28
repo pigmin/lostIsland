@@ -11,7 +11,7 @@
         bool bFalling;
         bool bJumping;
         bool bOnGround;
-        bool bMoving;
+        bool bWalking;
         
         bool bIsActive;
         int bIsAlive;   //de 0 a 127 : zombi, apres 127 vivant

@@ -9,7 +9,8 @@
 
 #include "Particle.h"
 #include <stdlib.h>
-#include <math.h>
+#include <WMath.h>
+#include "gfx_utils.h"
 
 Particles::Particles(){}
 Particles::~Particles(){}
@@ -51,20 +52,17 @@ void Particles::moveParticles()
             particles[i].life = particles[i].life - 1;
         }
 
-        if (particles[i].velX != 0) {
-            particles[i].velX *= 0.85f;        // subtract from positive numbers
-        } 
-        
-        /*if (particles[i].velY > 0) {
-            particles[i].velY--;        // for both coordinates.
-        } else {
-            particles[i].velY++;
-        }*/
-        if (particles[i].velY < 21)
-            particles[i].velY = particles[i].velY + 3;
-        else {
-            if (particles[i].velY != 0) {
-                particles[i].velY *= 0.85f;        // subtract from positive numbers
+        if (particles[i].weight > 0)
+        {
+            if (particles[i].velX != 0) {
+                particles[i].velX *= 0.85f;        // subtract from positive numbers
+            }             
+            if (particles[i].velY < 21)
+                particles[i].velY = particles[i].velY + 3*particles[i].weight;
+            else {
+                if (particles[i].velY != 0) {
+                    particles[i].velY *= 0.85f;        // subtract from positive numbers
+                }
             }
         }
 
@@ -110,10 +108,37 @@ void Particles::createExplosion(int x, int y, int num_parts, uint16_t color, int
     {
         particle.x = x;
         particle.y = y;
+        particle.w = random(1,3);
+        particle.h = particle.w;
         particle.life = life;
-        particle.velX = (rand() % 60) - 30;
-        particle.velY = (rand() % 60) - 30;
+        particle.weight = 1;
+        particle.velX = (rand() % 70) - 35;
+        particle.velY = (rand() % 60) - 40;
         particle.color = color;
+        
+        addParticle(&particle);
+    }
+}
+
+
+// creates num_parts particles at x,y with random velocities
+void Particles::createDust(int x, int y, int num_parts, int xspeed, int yspeed, int life)
+{
+    int i;
+    Particle particle;
+    
+    for (i = 0; i < num_parts; i++)
+    {
+        particle.w = random(2,5);
+        particle.x = x + random(-4,4);
+        particle.y = y - random(particle.w, particle.w + 2);
+        particle.h = particle.w;
+        particle.life = life;
+        particle.weight = 0;
+        particle.velX = xspeed;
+        particle.velY = yspeed;
+        uint8_t bright = random(200,255);
+        particle.color = rgbTo565(bright, bright, bright);
         
         addParticle(&particle);
     }

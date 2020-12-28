@@ -136,6 +136,7 @@ static const uint32_t PROGMEM pmf_aceman[] =
 #include "sounds/Pioche.h"
 #include "sounds/RockBreaks.h"
 #include "sounds/ItemPickup.h"
+#include "sounds/Kick.h"
 
 #include "pmf_player.h"
 
@@ -551,7 +552,7 @@ void setup()
     stopMusic();
     //playMusic(Pinball);
 
-    setup_timer3(100);
+    setup_timer3(150);
     //arcada.timerCallback(100, MOD_callback);
 
     PlayMOD(pmf_aceman);
@@ -596,7 +597,6 @@ void initPlayer()
     Player.bJumping = false;
     Player.bFalling = false;
     Player.bWalking = false;
-    Player.bMoving = false;
     Player.bTouched = false;
     Player.iTouchCountDown = 0;
 
@@ -720,18 +720,38 @@ void set_dying()
     }
 }
 
-void set_double_jump_fx(void)
+void set_double_jump_fx(bool bForced = false)
 {
     if (Player.FX.stateAnim != FX_DOUBLE_JUMP)
     {
         Player.FX.stateAnim = FX_DOUBLE_JUMP;
         Player.FX.anim_frame = 0;
+        //on le met sur le framerate final pour quil apparaissent de suite
         Player.FX.current_framerate = FX_FRAMERATE_DOUBLE_JUMP;
         Player.FX.direction = Player.pos.direction;
+//        Player.FX.speedX = 0;
+//        Player.FX.speedY = 0;
         Player.FX.pX = Player.pos.pX;
         Player.FX.pY = Player.pos.pY;
     }
 }
+
+
+void set_dust_fx(void)
+{
+    if (Player.FX.stateAnim != FX_DUST)
+    {
+        Player.FX.stateAnim = FX_DUST;
+        Player.FX.anim_frame = 0;
+        Player.FX.current_framerate = 0;
+        Player.FX.direction = Player.pos.direction;
+        Player.FX.speedY = -2;
+        Player.FX.speedX = 0;
+        Player.FX.pX = Player.pos.pX + 8;
+        Player.FX.pY = Player.pos.pY + 15;
+    }
+}
+
 
 void set_touched()
 {
@@ -1085,6 +1105,11 @@ void drawPlayer()
         anim_player_fx_double_jump();
         break;
     }
+    case FX_DUST:
+    {
+        anim_player_fx_dust();
+        break;
+    }    
     }
 }
 
@@ -1487,7 +1512,13 @@ void drawParticles()
         if ((x < 0) || (x >= SCREEN_WIDTH))
             continue;
 
-        canvas->drawPixel(x, y, parts.particles[i].color);
+        int w = parts.particles[i].w;
+        int h = parts.particles[i].h;
+        
+        if (w == 1 & h == 1)
+            canvas->drawPixel(x, y, parts.particles[i].color);
+        else
+            canvas->fillRect(x, y, w, h, parts.particles[i].color);
         //arcada.display->setPixel(x - (velX/10), y - (velY/10));
         //arcada.display->setPixel(x - (velX/20), y - (velY/20));
         //glcd.setpixel(x - (velX/5), y - (velY/5), ARCADA_WHITE); // uncomment for trail-deleting action!
@@ -1804,7 +1835,7 @@ void checkPlayerCollisionsEntities()
                     //  Serial.println("Collision.");
                     if (Player.bFalling)
                     {
-                        //            sndPlayerCanal1.play(AudioSamplePlayershell);
+                        sndPlayerCanal3.play(AudioSample__Kick);
                         SCORE += 5;
                         killEnnemy(currentEnnemy, px, py);
                         //rebond
@@ -1847,7 +1878,7 @@ void updatePlayer()
              (Player.pos.direction < 0 && (Player.pos.pX >= 2))))
         {
             Player.pos.pX += 1;
-            Player.bMoving = true;
+            Player.bWalking = true;
         }
 
         //Particules feu artifice ?
@@ -1898,7 +1929,7 @@ void updatePlayer()
 
 void computePlayerAnimations()
 {
-    //Serial.printf("counterActionB:%d Player.bJumping:%d Player.bFalling:%d bOnGround:%d Player.bWantWalk:%d Player.bMoving:%d\n", counterActionB, Player.bJumping, Player.bFalling, bOnGround, Player.bWantWalk, Player.bMoving);
+    //Serial.printf("counterActionB:%d Player.bJumping:%d Player.bFalling:%d bOnGround:%d Player.bWantWalk:%d Player.bWalking:%d\n", counterActionB, Player.bJumping, Player.bFalling, bOnGround, Player.bWantWalk, Player.bWalking);
     if (counterActionB > 0)
     {
         //@todo : Test type action,
@@ -1921,9 +1952,11 @@ void computePlayerAnimations()
             {
                 if (Player.bWantWalk) // demannde de deplacement)
                 {
-                    if (Player.bMoving) //On a bougé
+                    if (Player.bWalking) //On a bougé
                     {
                         set_walking();
+                        set_dust_fx();
+
                     }
                     else // @todo push
                         set_idle();
@@ -1976,14 +2009,14 @@ void updateEnnemies()
                 if (currentEnnemy->speed_x > 0)
                 {
                     currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
-                    currentEnnemy->bMoving = true;
+                    currentEnnemy->bWalking = true;
 
                     currentEnnemy->new_x = min(((WORLD_WIDTH - 1) * 16), currentEnnemy->new_x);
                 }
                 else if (currentEnnemy->speed_x < 0)
                 {
                     currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
-                    currentEnnemy->bMoving = true;
+                    currentEnnemy->bWalking = true;
 
                     currentEnnemy->new_x = max(0, currentEnnemy->new_x);
                 }
@@ -2233,15 +2266,11 @@ void updatePlayerPosition()
         if (Player.pos.speedX > 0)
         {
             Player.pos.newX = Player.pos.pX + Player.pos.speedX;
-            Player.bMoving = true;
-
             Player.pos.newX = min(((WORLD_WIDTH - 2) * 16), Player.pos.newX);
         }
         else if (Player.pos.speedX < 0)
         {
             Player.pos.newX = Player.pos.pX + Player.pos.speedX;
-            Player.bMoving = true;
-
             Player.pos.newX = max(0, Player.pos.newX);
         }
     }
@@ -2305,8 +2334,12 @@ void checkPlayerCollisionsWorld()
             Player.pos.speedY = 0;
         }
     }
-
-    Player.pos.pX = Player.pos.newX;
+    Player.bWalking = false;
+    if (Player.pos.pX != Player.pos.newX)
+    {
+        Player.bWalking = true;
+        Player.pos.pX = Player.pos.newX;
+    }
     Player.pos.pY = Player.pos.newY;
 }
 
@@ -2463,7 +2496,7 @@ void checkPlayerInputs()
                 //Thrust
                 Player.pos.speedY = -DOUBLE_JUMP_SPEED;
                 //Spawn Effect
-                set_double_jump_fx();
+                set_double_jump_fx(true);
             }
         }
 
@@ -2501,7 +2534,6 @@ void checkPlayerInputs()
 void updateGame()
 {
     int lastX = 0;
-    Player.bMoving = false;
 
     if (Player.bDying)
     {
@@ -3178,6 +3210,35 @@ void anim_player_wining()
       drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_run2.width, player_run2.height, player_run2.pixel_data, Player.pos.direction);
     break;
   }*/
+}
+
+void anim_player_fx_dust() 
+{
+    //Pas vraiment une anim mais des particules, principe identique cependant
+    if (Player.FX.current_framerate == FX_FRAMERATE_DUST)
+    {
+        Player.FX.anim_frame++;
+        Player.FX.current_framerate = 0;
+    }
+    Player.FX.current_framerate++;
+
+    if (Player.FX.anim_frame > FX_FRAME_DUST_1)
+    {
+        //Annulation de l'anim
+        Player.FX.stateAnim = FX_NONE;
+        return;
+    }
+
+    switch (Player.FX.anim_frame)
+    {
+    case FX_FRAME_DUST_1:
+        //Dust
+        if (Player.FX.direction > 0)
+            parts.createDust(Player.FX.pX - cameraX, Player.FX.pY - cameraY, 5, Player.FX.speedX, Player.FX.speedY, random(FX_FRAMERATE_DUST + 5, FX_FRAMERATE_DUST << 1 ));
+        else
+            parts.createDust(Player.FX.pX - cameraX, Player.FX.pY - cameraY, 5, Player.FX.speedX, Player.FX.speedY, random(FX_FRAMERATE_DUST + 5, FX_FRAMERATE_DUST << 1 ));
+        break;
+    }
 }
 
 void anim_player_fx_double_jump()

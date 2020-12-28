@@ -35,6 +35,8 @@ typedef struct TPlayer
     int8_t direction;
     int     pX;
     int     pY;
+    int     speedX;
+    int     speedY;
   } FX;
 
   int cible_wX, cible_wY;
@@ -45,7 +47,6 @@ typedef struct TPlayer
   bool bFalling;
   bool bWalking;
   bool bOnGround;
-  bool bMoving;
   bool bTouched;
 
   bool bWantWalk;
@@ -88,7 +89,6 @@ typedef struct Enemy
   bool bFalling;
   bool bWalking;
   bool bOnGround;
-  bool bMoving;
   bool bTouched;
   int iTouchCountDown;
 
