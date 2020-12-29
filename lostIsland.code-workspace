@@ -58,7 +58,10 @@
 			"__locale": "cpp",
 			"__string": "cpp",
 			"memory_resource": "cpp",
-			"*.inc": "cpp"
+			"*.inc": "cpp",
+			"__mutex_base": "cpp",
+			"streambuf": "cpp",
+			"thread": "cpp"
 		}
 	}
 }

@@ -137,6 +137,15 @@ static const uint32_t PROGMEM pmf_aceman[] =
 
 #include "pmf_player.h"
 
+#ifndef _swap_int16_t
+#define _swap_int16_t(a, b)                                                    \
+  {                                                                            \
+    int16_t t = a;                                                             \
+    a = b;                                                                     \
+    b = t;                                                                     \
+  }
+#endif
+
 uint8_t frameRate;
 uint16_t frameCount;
 uint8_t eachFrameMillis;
@@ -204,10 +213,11 @@ int coolDownActionB = 0;
 
 TPlayer Player;
 
+
 //Masque applique sur les tiles pour les eclairer
-#define HEIGHT_LIGHT_MASK 9
-#define WIDTH_LIGHT_MASK 9
-int16_t lightMASK[HEIGHT_LIGHT_MASK][WIDTH_LIGHT_MASK] = { 0 };
+#define PLAYER_LIGHT_MASK_HEIGHT 9
+#define PLAYER_LIGHT_MASK_WIDTH 9
+int16_t playerLightMask[PLAYER_LIGHT_MASK_HEIGHT][PLAYER_LIGHT_MASK_WIDTH] = { 0 };
 
 TworldTile WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
 #define HEADER_ROW WORLD_HEIGHT
@@ -231,8 +241,7 @@ void drawTiles();
 void drawParticles();
 void drawWorld();
 void pixelToWorld(int *pX, int *pY);
-TworldTile checkCollisionAt(int newX, int newY);
-TworldTile checkCollisionTo(int x, int y, int newX, int newY);
+bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y);
 void checkPlayerCollisionsEntities();
 void updatePlayer();
 void updateEnnemies();
@@ -793,23 +802,30 @@ void set_wining()
 void initWorld()
 {
     //MASQUE LUMIERE PLAYER
-    int centerX = WIDTH_LIGHT_MASK / 2;
-    int centerY = HEIGHT_LIGHT_MASK / 2;
+    int centerX = PLAYER_LIGHT_MASK_WIDTH / 2;
+    int centerY = PLAYER_LIGHT_MASK_HEIGHT / 2;
 
-    for (int wY = 0; wY < HEIGHT_LIGHT_MASK; wY++)
+    for (int wY = 0; wY < PLAYER_LIGHT_MASK_HEIGHT; wY++)
     {
-        for (int wX = 0; wX < WIDTH_LIGHT_MASK; wX++)
+        for (int wX = 0; wX < PLAYER_LIGHT_MASK_WIDTH; wX++)
         {
             //Ray cast du player vers decor ?
             float distPlayer = sqrt((centerX - wX) * (centerX - wX) + (centerY - wY) * (centerY - wY));
             //Serial.printf("player:%d,%d tile:%d,%d dist:%f\n", playerLightX, playerLightY, px, py,  distPlayer);
             // @todo gerer la non propagassion de la lumiere dans les murs...
-            if (distPlayer < 4 && distPlayer > 0)
+            if (distPlayer > 0)
             {
-                lightMASK[wY][wX] = PLAYER_LIGHT_INTENSITY / (distPlayer*distPlayer);
+                playerLightMask[wY][wX] = (PLAYER_LIGHT_INTENSITY / (distPlayer*distPlayer));
             }
+            else
+            {
+                playerLightMask[wY][wX] = PLAYER_LIGHT_INTENSITY;
+            }
+            
         }
     }
+
+    
 
     //uint8_t zeNoise[WORLD_WIDTH];
     memset(WORLD, 0, sizeof(WORLD));
@@ -1350,10 +1366,10 @@ void drawEnnemies()
 
 void drawTiles()
 {
-    int playerLightStartX = Player.pos.worldX - (WIDTH_LIGHT_MASK / 2);
-    int playerLightStartY = Player.pos.worldY - (HEIGHT_LIGHT_MASK / 2);
-    int playerLightEndX = playerLightStartX + (WIDTH_LIGHT_MASK - 1);
-    int playerLightEndY = playerLightStartY + (HEIGHT_LIGHT_MASK - 1);
+    int playerLightStartX = Player.pos.worldX - (PLAYER_LIGHT_MASK_WIDTH / 2);
+    int playerLightStartY = Player.pos.worldY - (PLAYER_LIGHT_MASK_HEIGHT / 2);
+    int playerLightEndX = playerLightStartX + (PLAYER_LIGHT_MASK_WIDTH - 1);
+    int playerLightEndY = playerLightStartY + (PLAYER_LIGHT_MASK_HEIGHT - 1);
 
     for (int wX = worldMIN_X; wX < worldMAX_X; wX++)
     {
@@ -1375,15 +1391,17 @@ void drawTiles()
                         if (profondeurColonne != 0)
                         {
                             int delta = (wY - profondeurColonne) + 1;
-                            if (delta > 0)
-                                curLight = curLight / (0.75 * delta);
+                            if (delta > 1)
+                                curLight = curLight / delta;
                         }
 
-                        //if (wY <= (Player.pos.worldY + 1))
+                        //if (wY <= (Player.pos.worldY + 2))
                         {
                             if (wX >= playerLightStartX && wX <= playerLightEndX && wY >= playerLightStartY && wY <= playerLightEndY)
                             {
-                                curLight = curLight + lightMASK[wY- playerLightStartY][wX - playerLightStartX];
+                                //Raycast
+                                if (checkCollisionTo(Player.pos.worldX, Player.pos.worldY, wX, wY))
+                                    curLight = curLight + playerLightMask[wY- playerLightStartY][wX - playerLightStartX];
                             }
                         }
                         //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
@@ -1632,6 +1650,58 @@ void drawHud()
     arcada.pixels.show();
 }
 
+#if 0
+void lightMask() {
+
+    int lightX = (Player.pos.pX - cameraX) + 8;
+    int lightY = (Player.pos.pY - cameraY) + 8;
+
+    int startX = lightX - 32;
+    int startY = lightY - 32;
+    int endX = startX + 64;
+    int endY = startY + 64;
+
+    int screenStartX = max(0, startX);
+    int screenStartY = max(0, startY);
+    int screenEndX = min(ARCADA_TFT_WIDTH - 1, endX);
+    int screenEndY = min(ARCADA_TFT_HEIGHT - 1, endY);
+
+    for (int pX = 0; pX < 160; pX++)
+        for (int pY = 0; pY < 128; pY++)
+        {
+            uint16_t value = canvas->getPixel(pX, pY);
+            if (value != 0x867D)
+            {
+                //pour le moment float ?
+                if (pX >= startX && pX < endX && pY >= startY && pY < endY) 
+                {
+                    float dist = sqrt((pX-lightX)*(pX-lightX) + (pY-lightY)*(pY-lightY));
+                    int curLight = (PLAYER_LIGHT_INTENSITY*20 / dist);
+                    
+                    curLight = min(curLight, MAX_LIGHT_INTENSITY);
+                    float coeff = (float)curLight / MAX_LIGHT_INTENSITY;
+                    uint16_t value = canvas->getPixel(pX, pY);
+                    if (value != 0x867D)
+                    {
+                        if (coeff == 0)
+                            canvas->drawPixel(pX, pY, ARCADA_BLACK);
+                        else
+                        {
+                        uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
+                        uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
+                        uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
+                        value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
+                        canvas->drawPixel(pX, pY, value);
+                        }            
+                    }
+                }
+                else
+                    canvas->drawPixel(pX, pY, ARCADA_BLACK);
+            }
+        }
+}
+#endif
+
 void drawWorld()
 {
     drawTiles();
@@ -1639,6 +1709,8 @@ void drawWorld()
     drawEnnemies();
 
     drawItems();
+
+    //lightMask();
 
     drawPlayer();
 
@@ -1655,31 +1727,213 @@ void pixelToWorld(int *pX, int *pY)
     int wY = *pY / 16;
 }
 
-TworldTile checkCollisionTo(int x, int y, int newX, int newY)
-{
-    TworldTile res = {0};
-
-    for (int wX = x; wX <= newX; wX++)
-    {
-        for (int wY = y; wY <= newY; wY++)
-        {
-            TworldTile value = WORLD[wY][wX];
-            if (!value.attr.traversable)
-            {
-                return value;
+/* Adapted from the code displayed at RogueBasin's "Bresenham's Line
+ * Algorithm" article, this function checks for an unobstructed line
+ * of sight between two locations using Bresenham's line algorithm to
+ * draw a line from one point to the other. Returns true if there is
+ * line of sight, false if there is no line of sight. */
+#define LOS_DISTANCE    9
+#if 0
+int los (int los_x_1, int los_y_1, int los_x_2, int
+         los_y_2, int level) {
+   int delta_x, delta_y, move_x, move_y, error;
+ 
+   /* Calculate deltas. */
+   delta_x = abs (los_x_2 - los_x_1) << 1;
+   delta_y = abs (los_y_2 - los_y_1) << 1;
+ 
+   /* Calculate signs. */
+   move_x = los_x_2 >= los_x_1 ? 1 : -1;
+   move_y = los_y_2 >= los_y_1 ? 1 : -1;
+ 
+   /* There is an automatic line of sight, of course, between a
+    * location and the same location or directly adjacent
+    * locations. */
+   if (abs (los_x_2 - los_x_1) < 2 && abs (los_y_2 - los_y_1) < 2) {
+      /* Return. */
+      return true;
+   }
+ 
+   /* Ensure that the line will not extend too long. */
+   if (((los_x_2 - los_x_1) * (los_x_2 - los_x_1))
+       + ((los_y_2 - los_y_1) * (los_y_2 -
+                                 los_y_1)) >
+       LOS_DISTANCE * LOS_DISTANCE) {
+      /* Return. */
+      return false;
+   }
+ 
+   /* "Draw" the line, checking for obstructions. */
+   if (delta_x >= delta_y) {
+      /* Calculate the error factor, which may go below zero. */
+      error = delta_y - (delta_x >> 1);
+ 
+      /* Search the line. */
+      while (los_x_1 != los_x_2) {
+         /* Check for an obstruction. If the obstruction can be "moved
+          * around", it isn't really an obstruction. */
+         if (feature_data(dungeon (los_x_1, los_y_1, level).feature).obstruction &&
+             (((los_y_1 - move_y >= 1
+                && los_y_1 - move_y <= DUNGEON_HEIGHT)
+               &&
+               feature_data (dungeon
+                                    (los_x_1, los_y_1 - move_y,
+                                     level).feature).obstruction)
+              || (los_y_1 != los_y_2 || !(delta_y)))) {
+            /* Return. */
+            return false;
+         }
+ 
+         /* Update values. */
+         if (error > 0) {
+            if (error || (move_x > 0)) {
+               los_y_1 += move_y;
+               error -= delta_x;
             }
-        }
-    }
-    return res;
+         }
+         los_x_1 += move_x;
+         error += delta_y;
+      }
+   }
+   else {
+      /* Calculate the error factor, which may go below zero. */
+      error = delta_x - (delta_y >> 1);
+ 
+      /* Search the line. */
+      while (los_y_1 != los_y_2) {
+         /* Check for an obstruction. If the obstruction can be "moved
+          * around", it isn't really an obstruction. */
+         if (feature_data
+             (dungeon (los_x_1, los_y_1, level).feature).obstruction
+             &&
+             (((los_x_1 - move_x >= 1
+                && los_x_1 - move_x <= DUNGEON_WIDTH)
+               &&
+               feature_data (dungeon
+                                    (los_x_1 - move_x, los_y_1,
+                                     level).feature).obstruction)
+              || (los_x_1 != los_x_2 || !(delta_x)))) {
+            /* Return. */
+            return false;
+         }
+ 
+         /* Update values. */
+         if (error > 0) {
+            if (error || (move_y > 0)) {
+               los_x_1 += move_x;
+               error -= delta_y;
+            }
+         }
+         los_y_1 += move_y;
+         error += delta_x;
+      }
+   }
+ 
+   /* Return. */
+   return true;
 }
+#endif
 
-TworldTile checkCollisionAt(int newX, int newY)
+/* Line of sight code         *
+ * this is a Boolean function *
+ * that returns FALSE if the  *
+ * monster cannot see the     *
+ * player and TRUE if it can  *
+ *                            *
+ * It has the monsters x and y*
+ * coords as parameters       */
+bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y)
 {
-    int check_worldX = newX / 16;
-    int check_worldY = newY / 16;
-
-    return getWorldAt(check_worldX, check_worldY);
+    int t, x, y, abs_delta_x, abs_delta_y, sign_x, sign_y, delta_x, delta_y;
+ 
+    if (origin_x == dest_x && origin_y == dest_y)
+        return true;
+   /* Delta x is the players x minus the monsters x    *
+    * d is my dungeon structure and px is the players  *
+    * x position. origin_x is the monsters x position passed *
+    * to the function.                                 */
+   delta_x = dest_x - origin_x;
+ 
+   /* delta_y is the same as delta_x using the y coordinates */
+   delta_y = dest_y - origin_y;
+ 
+   /* abs_delta_x & abs_delta_y: these are the absolute values of delta_x & delta_y */
+   abs_delta_x = abs(delta_x);
+   abs_delta_y = abs(delta_y);
+ 
+   /* sign_x & sign_y: these are the signs of delta_x & delta_y */
+   delta_x > 0 ? sign_x = 1 : sign_x = -1;
+   delta_y > 0 ? sign_y = 1 : sign_y = -1;
+ 
+   /* x & y: these are the monster's x & y coords */
+   x = origin_x;
+   y = origin_y;
+ 
+   /* The following if statement checks to see if the line *
+    * is x dominate or y dominate and loops accordingly    */
+   if(abs_delta_x > abs_delta_y)
+   {
+      /* X dominate loop */
+      /* t = twice the absolute of y minus the absolute of x*/
+      t = abs_delta_y * 2 - abs_delta_x;
+      do
+      {
+         if(t >= 0)
+         {
+            /* if t is greater than or equal to zero then *
+             * add the sign of delta_y to y                    *
+             * subtract twice the absolute of delta_x from t   */
+            y += sign_y;
+            t -= abs_delta_x*2;
+         }
+ 
+         /* add the sign of delta_x to x      *
+          * add twice the adsolute of delta_y to t  */
+         x += sign_x;
+         t += abs_delta_y * 2;
+ 
+         /* check to see if we are at the player's position */
+         if (x == dest_x && y == dest_y)
+         {
+            /* return that the monster can see the player */
+            return true;
+         }
+      /* keep looping until the monster's sight is blocked *
+       * by an object at the updated x,y coord             */
+      }
+      while(WORLD[y][x].attr.traversable == true);
+ 
+      /* NOTE: sight_blocked is a function that returns true      *
+       * if an object at the x,y coord. would block the monster's *
+       * sight                                                    */
+ 
+      /* the loop was exited because the monster's sight was blocked *
+       * return FALSE: the monster cannot see the player             */
+      return false;
+   }
+   else
+   {
+      /* Y dominate loop, this loop is basically the same as the x loop */
+      t = abs_delta_x * 2 - abs_delta_y;
+      do
+      {
+         if(t >= 0)
+         {
+            x += sign_x;
+            t -= abs_delta_y * 2;
+         }
+         y += sign_y;
+         t += abs_delta_x * 2;
+         if(x == dest_x && y == dest_y)
+         {
+            return true;
+         }
+      }
+      while(WORLD[y][x].attr.traversable == true);
+      return false;
+   }
 }
+
 
 void calculatePlayerCoords()
 {
