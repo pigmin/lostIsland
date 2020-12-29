@@ -40,9 +40,6 @@
 #define JUMP_SPEED 10
 #define DOUBLE_JUMP_SPEED 8
 
-
-
-
 #include "types.h"
 #include "items.h"
 #include "ennemies.h"
@@ -110,12 +107,12 @@ static const uint32_t PROGMEM pmf_aceman[] =
 
 #include "res/back_ground.c"
 
-#include "res/ground_top.c"
-#include "res/ground.c"
+#include "res2/ground_top.c"
+#include "res2/ground.c"
 #include "res/rock_argent.c"
 #include "res/rock_charbon.c"
 #include "res/rock_cuivre.c"
-#include "res/rock_empty.c"
+#include "res2/rock_empty.c"
 #include "res/rock_fer.c"
 #include "res/rock_jade.c"
 #include "res/rock_or.c"
@@ -140,7 +137,6 @@ static const uint32_t PROGMEM pmf_aceman[] =
 
 #include "pmf_player.h"
 
-
 uint8_t frameRate;
 uint16_t frameCount;
 uint8_t eachFrameMillis;
@@ -148,7 +144,6 @@ long lastFrameStart;
 long nextFrameStart;
 bool post_render;
 uint8_t lastFrameDurationMs;
-
 
 
 extern Adafruit_SPIFlash Arcada_QSPI_Flash;
@@ -209,6 +204,11 @@ int coolDownActionB = 0;
 
 TPlayer Player;
 
+//Masque applique sur les tiles pour les eclairer
+#define HEIGHT_LIGHT_MASK 9
+#define WIDTH_LIGHT_MASK 9
+int16_t lightMASK[HEIGHT_LIGHT_MASK][WIDTH_LIGHT_MASK] = { 0 };
+
 TworldTile WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
 #define HEADER_ROW WORLD_HEIGHT
 #define REF_ROW WORLD_HEIGHT + 1
@@ -263,10 +263,10 @@ int currentX_back = 0;
 
 int jumpPhase = 0;
 TworldTile brique_UP = {0};
-TworldTile brique_DOWN =  {0};
-TworldTile brique_DOWN_FRONT =  {0};
-TworldTile brique_FRONT =  {0};
-TworldTile brique_PLAYER =  {0};
+TworldTile brique_DOWN = {0};
+TworldTile brique_DOWN_FRONT = {0};
+TworldTile brique_FRONT = {0};
+TworldTile brique_PLAYER = {0};
 
 int count_player_die = 0;
 int count_player_win = 0;
@@ -452,7 +452,7 @@ void updateHauteurColonne(int x, int y)
 TworldTile getWorldAt(int x, int y)
 {
     TworldTile res = {0};
-    
+
     if ((x >= 0 && x < WORLD_WIDTH) && (y >= 0 && y < WORLD_HEIGHT))
         res = WORLD[y][x];
 
@@ -729,13 +729,12 @@ void set_double_jump_fx(bool bForced = false)
         //on le met sur le framerate final pour quil apparaissent de suite
         Player.FX.current_framerate = FX_FRAMERATE_DOUBLE_JUMP;
         Player.FX.direction = Player.pos.direction;
-//        Player.FX.speedX = 0;
-//        Player.FX.speedY = 0;
+        //        Player.FX.speedX = 0;
+        //        Player.FX.speedY = 0;
         Player.FX.pX = Player.pos.pX;
         Player.FX.pY = Player.pos.pY;
     }
 }
-
 
 void set_dust_fx(void)
 {
@@ -751,7 +750,6 @@ void set_dust_fx(void)
         Player.FX.pY = Player.pos.pY + 15;
     }
 }
-
 
 void set_touched()
 {
@@ -794,6 +792,24 @@ void set_wining()
 
 void initWorld()
 {
+    //MASQUE LUMIERE PLAYER
+    int centerX = WIDTH_LIGHT_MASK / 2;
+    int centerY = HEIGHT_LIGHT_MASK / 2;
+
+    for (int wY = 0; wY < HEIGHT_LIGHT_MASK; wY++)
+    {
+        for (int wX = 0; wX < WIDTH_LIGHT_MASK; wX++)
+        {
+            //Ray cast du player vers decor ?
+            float distPlayer = sqrt((centerX - wX) * (centerX - wX) + (centerY - wY) * (centerY - wY));
+            //Serial.printf("player:%d,%d tile:%d,%d dist:%f\n", playerLightX, playerLightY, px, py,  distPlayer);
+            // @todo gerer la non propagassion de la lumiere dans les murs...
+            if (distPlayer < 4 && distPlayer > 0)
+            {
+                lightMASK[wY][wX] = PLAYER_LIGHT_INTENSITY / (distPlayer*distPlayer);
+            }
+        }
+    }
 
     //uint8_t zeNoise[WORLD_WIDTH];
     memset(WORLD, 0, sizeof(WORLD));
@@ -1109,7 +1125,7 @@ void drawPlayer()
     {
         anim_player_fx_dust();
         break;
-    }    
+    }
     }
 }
 
@@ -1275,43 +1291,43 @@ void drawEnnemy(Tennemy *currentEnnemy)
     {
         switch (currentEnnemy->type)
         {
-            case SPIDER_ENNEMY:
+        case SPIDER_ENNEMY:
+        {
+            switch (currentEnnemy->anim_frame)
             {
-                switch (currentEnnemy->anim_frame)
-                {
-                    case 1:
-                        drawSprite(px, py, spider_walk1.width, spider_walk1.height, spider_walk1.pixel_data, 1);
-                        break;
-                    case 2:
-                        drawSprite(px, py, spider_walk2.width, spider_walk2.height, spider_walk2.pixel_data, 1);
-                        break;
-                }
+            case 1:
+                drawSprite(px, py, spider_walk1.width, spider_walk1.height, spider_walk1.pixel_data, 1);
+                break;
+            case 2:
+                drawSprite(px, py, spider_walk2.width, spider_walk2.height, spider_walk2.pixel_data, 1);
                 break;
             }
-            case ZOMBI_ENNEMY:
+            break;
+        }
+        case ZOMBI_ENNEMY:
+        {
+            int DIR = currentEnnemy->speed_x > 0 ? 1 : -1;
+            switch (currentEnnemy->anim_frame)
             {
-                int DIR = currentEnnemy->speed_x > 0 ? 1 : -1;
-                switch (currentEnnemy->anim_frame)
-                {
-                    case 1:
-                        drawSprite(px, py, zombi_walk1.width, zombi_walk1.height, zombi_walk1.pixel_data, DIR);
-                        break;
-                    case 2:
-                        drawSprite(px, py, zombi_walk2.width, zombi_walk2.height, zombi_walk2.pixel_data, DIR);
-                        break;
-                    case 3:
-                        drawSprite(px, py, zombi_walk3.width, zombi_walk3.height, zombi_walk3.pixel_data, DIR);
-                        break;
-                }
+            case 1:
+                drawSprite(px, py, zombi_walk1.width, zombi_walk1.height, zombi_walk1.pixel_data, DIR);
+                break;
+            case 2:
+                drawSprite(px, py, zombi_walk2.width, zombi_walk2.height, zombi_walk2.pixel_data, DIR);
+                break;
+            case 3:
+                drawSprite(px, py, zombi_walk3.width, zombi_walk3.height, zombi_walk3.pixel_data, DIR);
                 break;
             }
+            break;
+        }
         }
         if (currentEnnemy->bIsAlive >= 127)
         {
             int lgHealth = int(14 * currentEnnemy->health / currentEnnemy->max_health);
-            canvas->drawFastHLine(px+1, py-4, lgHealth, lgHealth < 8 ? 0xC180 : 0xAE6A);
-            canvas->drawFastHLine(px+1, py-3, lgHealth, lgHealth < 8 ? 0x8940 : 0x5C64);
-            canvas->drawRect(px, py-5, 16, 4, ARCADA_BLACK);
+            canvas->drawFastHLine(px + 1, py - 4, lgHealth, lgHealth < 8 ? 0xC180 : 0xAE6A);
+            canvas->drawFastHLine(px + 1, py - 3, lgHealth, lgHealth < 8 ? 0x8940 : 0x5C64);
+            canvas->drawRect(px, py - 5, 16, 4, ARCADA_BLACK);
         }
     }
 }
@@ -1334,8 +1350,10 @@ void drawEnnemies()
 
 void drawTiles()
 {
-    int playerLightX = Player.pos.worldX;
-    int playerLightY = Player.pos.worldY;
+    int playerLightStartX = Player.pos.worldX - (WIDTH_LIGHT_MASK / 2);
+    int playerLightStartY = Player.pos.worldY - (HEIGHT_LIGHT_MASK / 2);
+    int playerLightEndX = playerLightStartX + (WIDTH_LIGHT_MASK - 1);
+    int playerLightEndY = playerLightStartY + (HEIGHT_LIGHT_MASK - 1);
 
     for (int wX = worldMIN_X; wX < worldMAX_X; wX++)
     {
@@ -1358,18 +1376,14 @@ void drawTiles()
                         {
                             int delta = (wY - profondeurColonne) + 1;
                             if (delta > 0)
-                                curLight = curLight / delta;
+                                curLight = curLight / (0.75 * delta);
                         }
-                        // @todo : creer un masque de X*X autour du player pour "ajouter de la light"
-                        if (wY <= (playerLightY + 1) || value == 0 || value == 0x7F)
+
+                        //if (wY <= (Player.pos.worldY + 1))
                         {
-                            //Ray cast du player vers decor ?
-                            float distPlayer = sqrt((playerLightX - wX) * (playerLightX - wX) + (playerLightY - wY) * (playerLightY - wY));
-                            //Serial.printf("player:%d,%d tile:%d,%d dist:%f\n", playerLightX, playerLightY, px, py,  distPlayer);
-                            // @todo gerer la non propagassion de la lumiere dans les murs...
-                            if (distPlayer < 4)
+                            if (wX >= playerLightStartX && wX <= playerLightEndX && wY >= playerLightStartY && wY <= playerLightEndY)
                             {
-                                curLight = curLight + (PLAYER_LIGHT_INTENSITY / distPlayer);
+                                curLight = curLight + lightMASK[wY- playerLightStartY][wX - playerLightStartX];
                             }
                         }
                         //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
@@ -1514,7 +1528,7 @@ void drawParticles()
 
         int w = parts.particles[i].w;
         int h = parts.particles[i].h;
-        
+
         if (w == 1 & h == 1)
             canvas->drawPixel(x, y, parts.particles[i].color);
         else
@@ -1612,7 +1626,7 @@ void drawHud()
     canvas->fillRect(2, 2, lgHealth, 3, lgHealth < 8 ? 0xC180 : 0xAE6A);
     canvas->fillRect(2, 5, lgHealth, 3, lgHealth < 8 ? 0x8940 : 0x5C64);
     canvas->drawRect(1, 1, 32, 8, ARCADA_BLACK);
-        
+
     arcada.pixels.setPixelColor(4, 0x00FF00);
     //    arcada.pixels.setPixelColor(4, 0x00FF00);
     arcada.pixels.show();
@@ -1693,32 +1707,33 @@ void calculateWorldCoordinates()
 {
     cameraX = Player.pos.pX - (ARCADA_TFT_WIDTH / 2);
     cameraX = max(cameraX, 0);
-    cameraX = min(cameraX, ((WORLD_WIDTH-1) * 16) - ARCADA_TFT_WIDTH);
+    cameraX = min(cameraX, ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH);
 
     cameraY = Player.pos.pY - (ARCADA_TFT_HEIGHT / 2);
     cameraY = max(cameraY, 0);
-    cameraY = min(cameraY, ((WORLD_HEIGHT-1) * 16) - ARCADA_TFT_HEIGHT);
+    cameraY = min(cameraY, ((WORLD_HEIGHT - 1) * 16) - ARCADA_TFT_HEIGHT);
 
     worldX = cameraX / 16;
     currentOffset_X = cameraX % 16;
     worldMIN_X = min(worldX, (WORLD_WIDTH - 1) - (ARCADA_TFT_WIDTH / 16));
     worldMIN_X = max(worldMIN_X, 0);
     worldMAX_X = worldMIN_X + (ARCADA_TFT_WIDTH / 16);
-    worldMAX_X = min(worldMAX_X + 1, (WORLD_WIDTH-1));
+    worldMAX_X = min(worldMAX_X + 1, (WORLD_WIDTH - 1));
 
     worldY = cameraY / 16;
     currentOffset_Y = cameraY % 16;
     worldMIN_Y = min(worldY, (WORLD_HEIGHT - 1) - (ARCADA_TFT_HEIGHT / 16));
     worldMIN_Y = max(worldMIN_Y, 0);
     worldMAX_Y = worldMIN_Y + (ARCADA_TFT_HEIGHT / 16);
-    worldMAX_Y = min(worldMAX_Y + 1, (WORLD_HEIGHT-1));
+    worldMAX_Y = min(worldMAX_Y + 1, (WORLD_HEIGHT - 1));
 
     //Utile pour dessiner les sprites a l'ecran
     worldOffset_pX = (worldMIN_X * 16) + currentOffset_X;
     worldOffset_pY = (worldMIN_Y * 16) + currentOffset_Y;
 }
 
-int playerPickupItem(Titem *currentItem){
+int playerPickupItem(Titem *currentItem)
+{
     int ret = 0;
 
     //inventaire ?
@@ -1956,7 +1971,6 @@ void computePlayerAnimations()
                     {
                         set_walking();
                         set_dust_fx();
-
                     }
                     else // @todo push
                         set_idle();
@@ -2991,7 +3005,7 @@ void loop()
 
     //elapsedTime = millis() - now;
 
-    //Serial.printf("E:%d LFD:%d\n", elapsedTime, lastFrameDurationMs);
+    //Serial.printf("LFD:%d\n", lastFrameDurationMs);
 }
 
 void anim_player_idle()
@@ -3212,7 +3226,7 @@ void anim_player_wining()
   }*/
 }
 
-void anim_player_fx_dust() 
+void anim_player_fx_dust()
 {
     //Pas vraiment une anim mais des particules, principe identique cependant
     if (Player.FX.current_framerate == FX_FRAMERATE_DUST)
@@ -3234,9 +3248,9 @@ void anim_player_fx_dust()
     case FX_FRAME_DUST_1:
         //Dust
         if (Player.FX.direction > 0)
-            parts.createDust(Player.FX.pX - cameraX, Player.FX.pY - cameraY, 5, Player.FX.speedX, Player.FX.speedY, random(FX_FRAMERATE_DUST + 5, FX_FRAMERATE_DUST << 1 ));
+            parts.createDust(Player.FX.pX - cameraX, Player.FX.pY - cameraY, 5, Player.FX.speedX, Player.FX.speedY, random(FX_FRAMERATE_DUST + 5, FX_FRAMERATE_DUST << 1));
         else
-            parts.createDust(Player.FX.pX - cameraX, Player.FX.pY - cameraY, 5, Player.FX.speedX, Player.FX.speedY, random(FX_FRAMERATE_DUST + 5, FX_FRAMERATE_DUST << 1 ));
+            parts.createDust(Player.FX.pX - cameraX, Player.FX.pY - cameraY, 5, Player.FX.speedX, Player.FX.speedY, random(FX_FRAMERATE_DUST + 5, FX_FRAMERATE_DUST << 1));
         break;
     }
 }

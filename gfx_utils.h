@@ -3,7 +3,7 @@
 
 #define MAX_LIGHT_INTENSITY 7000
 #define SUN_LIGHT_INTENSITY 6000
-#define PLAYER_LIGHT_INTENSITY 3000
+#define PLAYER_LIGHT_INTENSITY 4000
 #define AMBIENT_LIGHT_INTENSITY 1000
 
 void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int8_t DIR = 1, int light = -1);
