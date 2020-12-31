@@ -122,6 +122,29 @@ void Particles::createExplosion(int x, int y, int num_parts, uint16_t color, int
 
 
 // creates num_parts particles at x,y with random velocities
+void Particles::createBodyExplosion(int x, int y, int num_parts, uint16_t color, int life)
+{
+    int i;
+    Particle particle;
+    
+    for (i = 0; i < num_parts; i++)
+    {
+        particle.x = x + 8;
+        particle.y = y + 8;
+        particle.w = random(2,4);
+        particle.h = random(2,8);
+        particle.life = life;
+        particle.weight = 1;
+        particle.velX = (rand() % 70) - 35;
+        particle.velY = (rand() % 60) - 40;
+        particle.color = color;
+        
+        addParticle(&particle);
+    }
+}
+
+
+// creates num_parts particles at x,y with random velocities
 void Particles::createDust(int x, int y, int num_parts, int xspeed, int yspeed, int life)
 {
     int i;

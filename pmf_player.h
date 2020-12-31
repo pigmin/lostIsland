@@ -52,8 +52,8 @@ typedef void(*pmf_tick_callback_t)(void *custom_data_);
 //===========================================================================
 // PMF player config
 //===========================================================================
-enum {pmfplayer_max_channels=18};        // maximum number of audio playback channels (reduce to save dynamic memory)
-#define PMF_USE_STEREO_MIXING 1          // use stereo mixing if supported (interleaved in the audio output buffer)
+enum {pmfplayer_max_channels=20};        // maximum number of audio playback channels (reduce to save dynamic memory)
+#define PMF_USE_STEREO_MIXING 0          // use stereo mixing if supported (interleaved in the audio output buffer)
 #define PMF_USE_LINEAR_INTERPOLATION 0   // interpolate samples linearly for better sound quality (more performanmce intensive)
 #define PFC_USE_SGTL5000_AUDIO_SHIELD 0  // enable playback through SGTL5000-based audio shield (Teensy)
 #define PMF_USE_SERIAL_LOGS 0            // enable logging to serial output (disable to save memory)

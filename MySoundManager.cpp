@@ -18,10 +18,8 @@ unsigned char *_currentMusic = NULL;
 bool bMusicEnded = true;
 
 // Four mixers are needed to handle 8 channels of music
-AudioMixer4     mixer1;
-AudioMixer4     mixer2;
-
 AudioMixer4     mixerFX;
+//AudioMixer4     mixerFX2;
 AudioMixer4     mixerMOD;
 
 
@@ -70,17 +68,59 @@ AudioConnection patchCord07(sine6, env6);
 AudioConnection patchCord08(sine7, env7);
 
 // Mix the 8 channels down to 4 audio streams
-AudioConnection patchCord17(env0, 0, mixer1, 0);
-AudioConnection patchCord18(env1, 0, mixer1, 1);
-AudioConnection patchCord19(env2, 0, mixer1, 2);
-AudioConnection patchCord20(env3, 0, mixer1, 3);
+AudioConnection patchCord17(env0, 0, mixerMOD, 0);
+AudioConnection patchCord18(env1, 0, mixerMOD, 1);
+AudioConnection patchCord19(env2, 0, mixerMOD, 2);
+AudioConnection patchCord20(env3, 0, mixerMOD, 3);
 
-AudioConnection patchCord21(env4, 0, mixer2, 0);
-AudioConnection patchCord22(env5, 0, mixer2, 1);
-AudioConnection patchCord23(env6, 0, mixer2, 2);
-AudioConnection patchCord24(env7, 0, mixer2, 3);
+AudioConnection patchCord21(env4, 0, mixerFX2, 0);
+AudioConnection patchCord22(env5, 0, mixerFX2, 1);
+AudioConnection patchCord23(env6, 0, mixerFX2, 2);
+AudioConnection patchCord24(env7, 0, mixerFX2, 3);
 
 #endif
+
+#if 0
+//Config generee par l'outil https://www.pjrc.com/teensy/gui/index.html?info=AudioEffectBitcrusher#
+#include <Audio.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <SD.h>
+#include <SerialFlash.h>
+
+// GUItool: begin automatically generated code
+AudioPlayMemory          sndPlayerCanal4;       //xy=324,1114
+AudioEffectBitcrusher    bitcrusher1;    //xy=610,1222
+AudioPlayMemory          playMem4;       //xy=627,1302
+AudioPlayMemory          playMem5;       //xy=639,1348
+AudioPlayMemory          sndPlayerCanal2;       //xy=697,1040
+AudioPlayMemory          sndPlayerCanal3;       //xy=698,1079
+AudioPlayMemory          sndPlayerCanal1;       //xy=699,1001
+AudioMixer4              mixerFX2;         //xy=955,1159
+AudioMixer4              mixerFX;         //xy=956,1009
+AudioMixer4              mixerMOD;         //xy=964,1311
+AudioMixer4              mixerLeft;         //xy=1211,1064
+AudioMixer4              mixerRight;         //xy=1215,1199
+AudioOutputAnalogStereo  audioOut;          //xy=1484,1117
+AudioConnection          patchCord1(sndPlayerCanal4, bitcrusher1);
+AudioConnection          patchCord2(bitcrusher1, 0, mixerFX, 3);
+AudioConnection          patchCord3(playMem4, 0, mixerMOD, 0);
+AudioConnection          patchCord4(playMem5, 0, mixerMOD, 1);
+AudioConnection          patchCord5(sndPlayerCanal2, 0, mixerFX, 1);
+AudioConnection          patchCord6(sndPlayerCanal3, 0, mixerFX, 2);
+AudioConnection          patchCord7(sndPlayerCanal1, 0, mixerFX, 0);
+AudioConnection          patchCord8(mixerFX2, 0, mixerLeft, 2);
+AudioConnection          patchCord9(mixerFX2, 0, mixerRight, 2);
+AudioConnection          patchCord10(mixerFX, 0, mixerLeft, 1);
+AudioConnection          patchCord11(mixerFX, 0, mixerRight, 1);
+AudioConnection          patchCord12(mixerMOD, 0, mixerLeft, 0);
+AudioConnection          patchCord13(mixerMOD, 0, mixerRight, 0);
+AudioConnection          patchCord14(mixerLeft, 0, audioOut, 0);
+AudioConnection          patchCord15(mixerRight, 0, audioOut, 1);
+// GUItool: end automatically generated code
+
+#endif
+
 
 // Now create 2 mixers for the main output
 AudioMixer4     mixerLeft;
@@ -90,19 +130,24 @@ AudioOutputAnalogStereo  audioOut;
 AudioPlayMemory sndPlayerCanal1;
 AudioPlayMemory sndPlayerCanal2;
 AudioPlayMemory sndPlayerCanal3;
+//AudioPlayMemory sndPlayerCanal4;
 
 AudioConnection FX1(sndPlayerCanal1, 0, mixerFX, 0);
 AudioConnection FX2(sndPlayerCanal2, 0, mixerFX, 1);
 AudioConnection FX3(sndPlayerCanal3, 0, mixerFX, 2);
-
+/*
+AudioEffectBitcrusher    bitcrusher1;
+AudioConnection          patchCord1(sndPlayerCanal4, bitcrusher1);
+AudioConnection          patchCord2(bitcrusher1, 0, mixerFX, 3);
+*/
 // Mix all channels to both the outputs
-AudioConnection patchCord33(mixer1, 0, mixerLeft, 0);
-AudioConnection patchCord34(mixer2, 0, mixerLeft, 1);
-AudioConnection patchCord35(mixerFX, 0, mixerLeft, 2);
+AudioConnection patchCord33(mixerMOD, 0, mixerLeft, 0);
+AudioConnection patchCord35(mixerFX, 0, mixerLeft, 1);
+//AudioConnection patchCord34(mixerFX2, 0, mixerLeft, 2);
 
-AudioConnection patchCord37(mixer1, 0, mixerRight, 0);
-AudioConnection patchCord38(mixer2, 0, mixerRight, 1);
-AudioConnection patchCord39(mixerFX, 0, mixerRight, 2);
+AudioConnection patchCord37(mixerMOD, 0, mixerRight, 0);
+AudioConnection patchCord39(mixerFX, 0, mixerRight, 1);
+//AudioConnection patchCord38(mixerFX2, 0, mixerRight, 2);
 
 AudioConnection patchCord41(mixerLeft, 0, audioOut, 0);
 AudioConnection patchCord42(mixerRight, 0, audioOut, 1);
@@ -131,13 +176,30 @@ void setupSoundManager()
   // reduce the gain on some channels, so half of the channels
   // are "positioned" to the left, half to the right, but all
   // are heard at least partially on both ears
-  mixer1.gain(0, 0.3);
-  mixer1.gain(1, 0.3);
+  mixerMOD.gain(0, 0.3);
+  mixerMOD.gain(1, 0.3);
+  mixerMOD.gain(2, 0.3);
+  mixerMOD.gain(3, 0.3);
 
+  mixerFX.gain(0, 1);
+  mixerFX.gain(1, 1);
+  mixerFX.gain(2, 1);
+  mixerFX.gain(3, 1);
+
+  mixerLeft.gain(0, 0.3);
   mixerLeft.gain(1, 0.3);
+  mixerLeft.gain(2, 0.3);
   mixerLeft.gain(3, 0.3);
+
   mixerRight.gain(0, 0.3);
+  mixerRight.gain(1, 0.3);
   mixerRight.gain(2, 0.3);
+  mixerRight.gain(3, 0.3);
+
+  //16 bits par defaut (aucun effet)
+//  bitcrusher1.bits(16);
+  //44Khz = par defaut, aucun changement
+//  bitcrusher1.sampleRate(44100);
 
 #ifdef MIDI_MUSIC
   // set envelope parameters, for pleasing sound :-)

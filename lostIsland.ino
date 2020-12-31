@@ -4,41 +4,8 @@
 #include <Adafruit_SPIFlash.h>
 #include <Adafruit_ZeroTimer.h>
 
-#undef DEBUG
-//#define NO_SOUND
-#define FPS 25
+#include "defines.h"
 
-// @todo passer en time based et non frame based
-// @todo idem pour les speed et anims frames des sprites...
-#define FRAMES_LOCK_ACTION_B int(300 / (1000 / FPS))
-#define FRAMES_ANIM_ACTION_B int(550 / (1000 / FPS))
-#define FRAMES_ACTION_B int(2000 / (1000 / FPS))
-#define FRAMES_COOLDOWN_B int(1000 / (1000 / FPS))
-
-#define WORLD_WIDTH 200
-#define WORLD_HEIGHT 96
-
-#define AMPLITUDE_HAUTEUR 16
-#define MEDIUM_HAUTEUR int(2 * WORLD_HEIGHT / 3)
-
-#define MAX_DENSITE 8
-#define AMPLITUDE_DENSITE 16
-
-#define HUD_ITEMS_X 16
-#define HUD_ITEMS_Y ARCADA_TFT_HEIGHT - 18
-
-#define BASE_X_PLAYER 7
-#define BASE_Y_PLAYER 1
-
-#define FALLING_SPEED 1
-#define WALKING_SPEED 2
-#define RUNNING_SPEED 2
-
-#define MAX_SPEED_X 4
-#define MAX_SPEED_Y 15
-
-#define JUMP_SPEED 10
-#define DOUBLE_JUMP_SPEED 8
 
 #include "types.h"
 #include "items.h"
@@ -53,6 +20,8 @@
 #include "MySoundManager.h"
 
 #include "SimplexNoise.h"
+
+#include "WaterSim.h"
 
 static const uint32_t PROGMEM pmf_ninja[] =
     {
@@ -105,20 +74,27 @@ static const uint32_t PROGMEM pmf_aceman[] =
 #include "res/zombi_walk2.c"
 #include "res/zombi_walk3.c"
 
-#include "res/back_ground.c"
+#include "res/skel_walk1.c"
+#include "res/skel_walk2.c"
+#include "res/skel_walk3.c"
+
+#include "res2/back_ground.c"
 
 #include "res2/ground_top.c"
 #include "res2/ground.c"
-#include "res/rock_argent.c"
-#include "res/rock_charbon.c"
-#include "res/rock_cuivre.c"
+#include "res/grass1.c"
+#include "res/grass2.c"
+#include "res/grass3.c"
+#include "res2/rock_diamant.c"
+#include "res2/rock_charbon.c"
+#include "res2/rock_cuivre.c"
 #include "res2/rock_empty.c"
-#include "res/rock_fer.c"
-#include "res/rock_jade.c"
-#include "res/rock_or.c"
-#include "res/rock_redstone.c"
+#include "res2/rock_fer.c"
+#include "res2/rock_jade.c"
+#include "res2/rock_or.c"
+#include "res2/rock_redstone.c"
 
-#include "res/argent_small.c"
+#include "res/diamant_small.c"
 #include "res/charbon_small.c"
 #include "res/cuivre_small.c"
 #include "res/rock_small.c"
@@ -138,12 +114,12 @@ static const uint32_t PROGMEM pmf_aceman[] =
 #include "pmf_player.h"
 
 #ifndef _swap_int16_t
-#define _swap_int16_t(a, b)                                                    \
-  {                                                                            \
-    int16_t t = a;                                                             \
-    a = b;                                                                     \
-    b = t;                                                                     \
-  }
+#define _swap_int16_t(a, b) \
+    {                       \
+        int16_t t = a;      \
+        a = b;              \
+        b = t;              \
+    }
 #endif
 
 uint8_t frameRate;
@@ -153,7 +129,6 @@ long lastFrameStart;
 long nextFrameStart;
 bool post_render;
 uint8_t lastFrameDurationMs;
-
 
 extern Adafruit_SPIFlash Arcada_QSPI_Flash;
 
@@ -213,11 +188,10 @@ int coolDownActionB = 0;
 
 TPlayer Player;
 
-
 //Masque applique sur les tiles pour les eclairer
 #define PLAYER_LIGHT_MASK_HEIGHT 9
 #define PLAYER_LIGHT_MASK_WIDTH 9
-int16_t playerLightMask[PLAYER_LIGHT_MASK_HEIGHT][PLAYER_LIGHT_MASK_WIDTH] = { 0 };
+int16_t playerLightMask[PLAYER_LIGHT_MASK_HEIGHT][PLAYER_LIGHT_MASK_WIDTH] = {0};
 
 TworldTile WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
 #define HEADER_ROW WORLD_HEIGHT
@@ -576,15 +550,20 @@ void clearRect(int16_t xMove, int16_t yMove, int16_t width, int16_t height)
 void initPlayer()
 {
     memset(&Player, 0, sizeof(Player));
-    Player.pos.pX = BASE_X_PLAYER * 16;
-    Player.pos.pY = BASE_Y_PLAYER * 16;
-    Player.pos.direction = 1;
 
+    Player.pos.worldX = BASE_X_PLAYER;
+    Player.pos.worldY = (WORLD[HEADER_ROW][BASE_X_PLAYER].id) - 1;
+    Player.pos.pX = Player.pos.worldX * 16;
+    Player.pos.pY = Player.pos.worldY * 16;
+    Player.pos.speedX = 0;
+    Player.pos.speedY = 0;
+    Player.pos.newX = Player.pos.pX;
+    Player.pos.newY = Player.pos.pY;
+
+    Player.pos.direction = 1;
     Player.pos.XFront = 0;
     Player.pos.YDown = 0;
     Player.pos.YUp = 0;
-    Player.pos.worldX = 0;
-    Player.pos.worldY = 0;
 
     Player.anim_frame = 0;
     Player.current_framerate = 0;
@@ -601,14 +580,17 @@ void initPlayer()
   unsigned char stars_kills;
   unsigned short armour_weapon;
 */
+    Player.bWantJump = false;
+    Player.bWantDoubleJump = false;
+    Player.bWantWalk = false;
 
     Player.bDying = false;
     Player.bJumping = false;
+    Player.bDoubleJumping = false;
     Player.bFalling = false;
     Player.bWalking = false;
     Player.bTouched = false;
     Player.iTouchCountDown = 0;
-
     Player.bOnGround = true;
 
     Player.max_health = 20;
@@ -630,26 +612,10 @@ void initGame()
 
     currentX_back = 0;
 
-    calculatePlayerCoords();
-
     counterActionB = 0;
     coolDownActionB = 0;
 
     jumpPhase = 0;
-
-    Player.bWantJump = false;
-    Player.bWantDoubleJump = false;
-    Player.bWantWalk = false;
-
-    Player.pos.speedX = 0;
-    Player.pos.speedY = 0;
-    Player.pos.newX = 0;
-    Player.pos.newY = 0;
-    Player.cible_wX, Player.cible_wY = 0;
-
-    Player.anim_frame = 0;
-    Player.current_framerate = 0;
-    Player.stateAnim = PLAYER_STATE_IDLE;
 
     count_player_die = 0;
     count_player_win = 0;
@@ -815,17 +781,14 @@ void initWorld()
             // @todo gerer la non propagassion de la lumiere dans les murs...
             if (distPlayer > 0)
             {
-                playerLightMask[wY][wX] = (PLAYER_LIGHT_INTENSITY / (distPlayer*distPlayer));
+                playerLightMask[wY][wX] = (PLAYER_LIGHT_INTENSITY / (distPlayer * distPlayer));
             }
             else
             {
                 playerLightMask[wY][wX] = PLAYER_LIGHT_INTENSITY;
             }
-            
         }
     }
-
-    
 
     //uint8_t zeNoise[WORLD_WIDTH];
     memset(WORLD, 0, sizeof(WORLD));
@@ -848,34 +811,32 @@ void initWorld()
 
         for (int wY = 0; wY < WORLD_HEIGHT; wY++)
         {
-            if (wY > (rowGround + 7))
+            if (wY > (rowGround + 5))
             {
                 WORLD[wY][wX].id = BLOCK_ROCK;
                 WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
                 WORLD[wY][wX].attr.traversable = 0;
-            }
-            else if (wY > (rowGround + 3))
-            {
-                WORLD[wY][wX].id = BLOCK_GROUND_ROCK;
-                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
-                WORLD[wY][wX].attr.traversable = 0;
+                WORLD[wY][wX].attr.opaque = 1;
             }
             else if (wY > rowGround)
             {
                 WORLD[wY][wX].id = BLOCK_GROUND;
                 WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
                 WORLD[wY][wX].attr.traversable = 0;
+                WORLD[wY][wX].attr.opaque = 1;
             }
             else if (wY == rowGround)
             {
                 WORLD[wY][wX].id = BLOCK_GROUND_TOP;
                 WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
                 WORLD[wY][wX].attr.traversable = 0;
+                WORLD[wY][wX].attr.opaque = 1;
             }
             else
             {
                 WORLD[wY][wX].id = BLOCK_AIR;
                 WORLD[wY][wX].attr.traversable = 1;
+                WORLD[wY][wX].attr.opaque = 0;
                 WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
             }
         }
@@ -888,17 +849,18 @@ void initWorld()
         int curProdondeur = WORLD[HEADER_ROW][wX].id;
         curProdondeur = max(4, curProdondeur);
 
-        for (int wY = curProdondeur - 4; wY < WORLD_HEIGHT; wY++)
+        for (int wY = curProdondeur - 4; wY < (WORLD_HEIGHT-1); wY++)
         {
             //            float noise = noiseGen.fractal(8, (float)16*wX / (float)WORLD_WIDTH, (float)16*wY / (float)WORLD_HEIGHT);
             float noise = SimplexNoise::noise((float)16 * wX / (float)WORLD_WIDTH, (float)16 * wY / (float)WORLD_HEIGHT);
             int16_t densite = int(noise * AMPLITUDE_DENSITE);
-            if (WORLD[wY][wX].id <= BLOCK_GROUND_ROCK)
+            if (WORLD[wY][wX].id <= BLOCK_GROUND)
             {
                 if (densite > MAX_DENSITE)
                 {
                     WORLD[wY][wX].id = BLOCK_AIR;
                     WORLD[wY][wX].attr.traversable = 1;
+                    WORLD[wY][wX].attr.opaque = 0;
                     WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
                 }
             }
@@ -908,13 +870,73 @@ void initWorld()
                 {
                     WORLD[wY][wX].id = BLOCK_UNDERGROUND_AIR;
                     WORLD[wY][wX].attr.traversable = 1;
+                    WORLD[wY][wX].attr.opaque = 1;
                     WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
                 }
                 else
                 {
-                    WORLD[wY][wX].id = abs(densite) + BLOCK_ROCK;
+                    int randSeed = rand() % 100;
+                    WORLD[wY][wX].id = BLOCK_ROCK;
+                    WORLD[wY][wX].attr.life = BLOCK_ROCK_DENSITY;
                     WORLD[wY][wX].attr.traversable = 0;
-                    WORLD[wY][wX].attr.life = int(max(densite / 2, BLOCK_LIFE_7));
+                    WORLD[wY][wX].attr.opaque = 1;
+                    if (wY >= curProdondeur + 5)
+                    {
+                        if (wY <= curProdondeur+12)
+                        {
+                            if (randSeed < 2)
+                            {
+                                WORLD[wY][wX].id = BLOCK_DIAMANT;
+                                WORLD[wY][wX].attr.life = BLOCK_DIAMANT_DENSITY;
+                                continue;
+                            }
+
+                            if (randSeed <= 20)
+                            {
+                                WORLD[wY][wX].id = BLOCK_REDSTONE;
+                                WORLD[wY][wX].attr.life = BLOCK_REDSTONE_DENSITY;
+                                continue;
+                            }
+                        }
+                        else
+                        if (wY <= curProdondeur+29)
+                        {
+                            if (randSeed < 2)
+                            {
+                                WORLD[wY][wX].id = BLOCK_JADE;
+                                WORLD[wY][wX].attr.life = BLOCK_JADE_DENSITY;
+                                continue;
+                            }
+                            else if (randSeed <= 4)
+                            {
+                                WORLD[wY][wX].id = BLOCK_OR;
+                                WORLD[wY][wX].attr.life = BLOCK_OR_DENSITY;
+                                continue;
+                            }
+                            else if (randSeed <= 14)
+                            {
+                                WORLD[wY][wX].id = BLOCK_CUIVRE;
+                                WORLD[wY][wX].attr.life = BLOCK_CUIVRE_DENSITY;
+                                continue;
+                            }
+                        }
+                        else
+                        if (wY <= curProdondeur+54)
+                        {
+                            if (randSeed < 20)
+                            {
+                                WORLD[wY][wX].id = BLOCK_FER;
+                                WORLD[wY][wX].attr.life = BLOCK_FER_DENSITY;
+                                continue;
+                            }
+                            else if (randSeed < 50)
+                            {
+                                WORLD[wY][wX].id = BLOCK_CHARBON;
+                                WORLD[wY][wX].attr.life = BLOCK_CHARBON_DENSITY;
+                                continue;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -926,8 +948,9 @@ void initWorld()
     }
     for (int wX = 0; wX < WORLD_WIDTH; wX++)
     {
-        for (int wY = 0; wY < WORLD_HEIGHT; wY++)
+        for (int wY = 0; wY < (WORLD_HEIGHT-1); wY++)
         {
+            TworldTile brick = WORLD[wY][wX];
             if (!WORLD[wY][wX].attr.traversable)
             {
                 //Sauvegarde de la hauteur courante et de la hauteur originelle
@@ -937,89 +960,131 @@ void initWorld()
                 WORLD[wY][wX].id = BLOCK_GROUND_TOP;
                 WORLD[wY][wX].attr.traversable = 0;
                 WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
+                WORLD[wY][wX].attr.opaque = 1;
 
                 //Si possible on change la tile juste en dessous pour du ground
                 if (wY + 1 < (WORLD_HEIGHT - 1))
                 {
                     WORLD[wY + 1][wX].id = BLOCK_GROUND;
                     WORLD[wY + 1][wX].attr.traversable = 0;
-                    WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
+                    WORLD[wY + 1][wX].attr.life = BLOCK_LIFE_1;
+                    WORLD[wY + 1][wX].attr.opaque = 1;
                 }
+                //Et celle du dessus par de l'herbe
+                if (wY - 1 >= 0)
+                {
+                    //12 pourcent de chance de mettre de l'herbe
+                    if (rand()%100 < 12)
+                    {
+                        WORLD[wY - 1][wX].id = BLOCK_GRASS1 + rand()%3;
+                        WORLD[wY - 1][wX].attr.life = BLOCK_LIFE_NA;
+                        WORLD[wY - 1][wX].attr.traversable = 1;
+                        WORLD[wY - 1][wX].attr.opaque = 0;
+                    }
+                }
+
                 break;
             }
         }
     }
 
     NB_WORLD_ENNEMIES = 0;
-    for (int wX = 1; wX < WORLD_WIDTH - 1; wX += 3)
+    //Skels
+    for (int iEnnemy = 0; iEnnemy < MAX_SKELS; iEnnemy++)
     {
-        for (int wY = 1; wY < WORLD_HEIGHT - 1; wY++)
+        int hauteur;
+        int posX;
+        TworldTile tile = {0};
+        TworldTile tileG = {0};
+        TworldTile tileD = {0};
+        do
+        {
+            posX = random(BASE_X_PLAYER + 5, WORLD_WIDTH - 2);
+            hauteur = WORLD[HEADER_ROW][posX].id;
+            tile = getWorldAt(posX, hauteur - 1);
+            tileG = getWorldAt(posX - 1, hauteur - 1);
+            tileD = getWorldAt(posX + 1, hauteur - 1);
+            // @todo tester que le zombi est pas deja sur un autre ennemi (un marqueur sur la tile ? )
+        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable);
+
+        //Skel
+        ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
+        ENNEMIES[NB_WORLD_ENNEMIES].worldX = posX;
+        ENNEMIES[NB_WORLD_ENNEMIES].worldY = hauteur - 1;
+        ENNEMIES[NB_WORLD_ENNEMIES].x = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
+        ENNEMIES[NB_WORLD_ENNEMIES].y = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
+        ENNEMIES[NB_WORLD_ENNEMIES].new_x = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].new_y = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].type = SKEL_ENNEMY;
+        ENNEMIES[NB_WORLD_ENNEMIES].speed_x = SKEL_WALKING_SPEED;
+        ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 4;
+        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 3;
+
+        ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
+        ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
+        ENNEMIES[NB_WORLD_ENNEMIES].bOnGround = false;
+
+        ENNEMIES[NB_WORLD_ENNEMIES].max_health = ZOMBI_HEALTH;
+        ENNEMIES[NB_WORLD_ENNEMIES].health = ZOMBI_HEALTH;
+
+        NB_WORLD_SKELS++;
+        NB_WORLD_ENNEMIES++;
+    }
+    for (int iEnnemy = 0; iEnnemy < MAX_ZOMBIES; iEnnemy++)
+    {
+        int hauteur;
+        int posX;
+        TworldTile tile = {0};
+        TworldTile tileG = {0};
+        TworldTile tileD = {0};
+
+        do
+        {
+            posX = random(BASE_X_PLAYER + 5, WORLD_WIDTH - 2);
+            hauteur = WORLD[HEADER_ROW][posX].id;
+            tile = getWorldAt(posX, hauteur - 1);
+            tileG = getWorldAt(posX - 1, hauteur - 1);
+            tileD = getWorldAt(posX + 1, hauteur - 1);
+            // @todo tester que le zombi est pas deja sur un autre ennemi (un marqueur sur la tile ? )
+        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable);
+
+        ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
+        ENNEMIES[NB_WORLD_ENNEMIES].worldX = posX;
+        ENNEMIES[NB_WORLD_ENNEMIES].worldY = hauteur - 1;
+        ENNEMIES[NB_WORLD_ENNEMIES].x = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
+        ENNEMIES[NB_WORLD_ENNEMIES].y = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
+        ENNEMIES[NB_WORLD_ENNEMIES].new_x = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].new_y = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].type = ZOMBI_ENNEMY;
+        ENNEMIES[NB_WORLD_ENNEMIES].speed_x = ZOMBI_WALKING_SPEED;
+        ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 4;
+        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 3;
+
+        ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
+        ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
+        ENNEMIES[NB_WORLD_ENNEMIES].bOnGround = false;
+
+        ENNEMIES[NB_WORLD_ENNEMIES].max_health = ZOMBI_HEALTH;
+        ENNEMIES[NB_WORLD_ENNEMIES].health = ZOMBI_HEALTH;
+
+        NB_WORLD_ENNEMIES++;
+        NB_WORLD_ZOMBIES++;
+    }
+    //Spiders
+    // @todo
+
+    for (int wX = BASE_X_PLAYER + 5; wX < WORLD_WIDTH - 1; wX += 3)
+    {
+        int hauteur = WORLD[HEADER_ROW][wX].id;
+        int seed = random(100);
+
+        for (int wY = hauteur + 1; wY < WORLD_HEIGHT - 1; wY++)
         {
             if (NB_WORLD_ENNEMIES < MAX_ENNEMIES)
             {
-                int hauteur = WORLD[HEADER_ROW][wX].id;
-                int seed = random(100);
-                if (seed < 10 && NB_WORLD_SKELS < MAX_SKELS)
-                {
-                    if (WORLD[HEADER_ROW][wX].attr.traversable)
-                    {
-                        /*
-                        //Zombi
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bIsAlive = 255;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX = wX;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY = hauteur - 1;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].x = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldX * 16;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].y = ENNEMIES[CURRENT_LEVEL_ENNEMIES].worldY * 16;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_x = 0;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].new_y = 0;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].type = SKEL_ENNEMY;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_x = SKEL_WALKING_SPEED;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].speed_y = 0;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].max_frames = 4;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].nb_anim_frames = 3;
-
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bFalling = false;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bJumping = false;
-                        ENNEMIES[CURRENT_LEVEL_ENNEMIES].bOnGround = false;
-
-                        ENNEMIES[NB_WORLD_ENNEMIES].max_health = ZOMBI_HEALTH;
-                        ENNEMIES[NB_WORLD_ENNEMIES].health = ZOMBI_HEALTH;
-*/
-                        NB_WORLD_SKELS++;
-                        //CURRENT_LEVEL_ENNEMIES++;
-                    }
-                }
-                else if (seed < 33 && NB_WORLD_ZOMBIES < MAX_ZOMBIES)
-                {
-                    if (WORLD[wY][wX].attr.traversable)
-                    {
-
-                        //Zombi
-                        ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
-                        ENNEMIES[NB_WORLD_ENNEMIES].worldX = wX;
-                        ENNEMIES[NB_WORLD_ENNEMIES].worldY = hauteur - 1;
-                        ENNEMIES[NB_WORLD_ENNEMIES].x = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
-                        ENNEMIES[NB_WORLD_ENNEMIES].y = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
-                        ENNEMIES[NB_WORLD_ENNEMIES].new_x = 0;
-                        ENNEMIES[NB_WORLD_ENNEMIES].new_y = 0;
-                        ENNEMIES[NB_WORLD_ENNEMIES].type = ZOMBI_ENNEMY;
-                        ENNEMIES[NB_WORLD_ENNEMIES].speed_x = ZOMBI_WALKING_SPEED;
-                        ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
-                        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 4;
-                        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 3;
-
-                        ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
-                        ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
-                        ENNEMIES[NB_WORLD_ENNEMIES].bOnGround = false;
-
-                        ENNEMIES[NB_WORLD_ENNEMIES].max_health = ZOMBI_HEALTH;
-                        ENNEMIES[NB_WORLD_ENNEMIES].health = ZOMBI_HEALTH;
-
-                        NB_WORLD_ENNEMIES++;
-                        NB_WORLD_ZOMBIES++;
-                    }
-                }
-                else if ((seed <= 50) && (wY > hauteur))
+                if (seed <= 60)
                 {
                     if (WORLD[wY][wX].attr.traversable && WORLD[wY][wX + 1].attr.traversable && WORLD[wY][wX - 1].attr.traversable && WORLD[wY - 1][wX].attr.traversable)
                     {
@@ -1056,11 +1121,20 @@ void initWorld()
         }
     }
 
-    Serial.printf("CURRENT_LEVEL_ENNEMIES:%d\n", NB_WORLD_ENNEMIES);
+    Serial.printf("NB_WORLD_ENNEMIES:%d\n", NB_WORLD_ENNEMIES);
     Serial.printf("Min:%f / Max:%f\n", minN, maxN);
 
     NB_WORLD_ITEMS = 0;
     CURRENT_QUEUE_ITEMS = 0;
+
+    //TEST WATER
+    
+    for (int nbW = 0; nbW < WORLD_WIDTH-4; nbW++)
+    {
+        int curP = WORLD[REF_ROW][4+nbW].id;
+        WORLD[(curP-1)][4+nbW].attr.Level = MAX_WATER_LEVEL;
+    }
+    
 
     StopMOD();
     PlayMOD(pmf_ninja);
@@ -1223,7 +1297,6 @@ void drawItem(Titem *currentItem)
     {
         switch (currentItem->type)
         {
-        case ITEM_GROUND_ROCK:
         case ITEM_ROCK:
             drawSprite(px, py, rock_small.width, rock_small.height, rock_small.pixel_data, 1);
             break;
@@ -1236,8 +1309,8 @@ void drawItem(Titem *currentItem)
         case ITEM_FER:
             drawSprite(px, py, fer_small.width, fer_small.height, fer_small.pixel_data, 1);
             break;
-        case ITEM_ARGENT:
-            drawSprite(px, py, argent_small.width, argent_small.height, argent_small.pixel_data, 1);
+        case ITEM_DIAMANT:
+            drawSprite(px, py, diamant_small.width, diamant_small.height, diamant_small.pixel_data, 1);
             break;
         case ITEM_JADE:
             drawSprite(px, py, jade_small.width, jade_small.height, jade_small.pixel_data, 1);
@@ -1275,7 +1348,18 @@ void killEnnemy(Tennemy *currentEnnemy, int px, int py)
     px -= worldOffset_pX;
     py -= worldOffset_pY;
 
-    parts.createExplosion(px, py, 16);
+    switch (currentEnnemy->type)
+    {
+    case SPIDER_ENNEMY:
+        parts.createExplosion(px, py, 16, ARCADA_BLACK);
+        break;
+    case ZOMBI_ENNEMY:
+        parts.createExplosion(px, py, 16, ARCADA_DARKGREEN);
+        break;
+    case SKEL_ENNEMY:
+        parts.createExplosion(px, py, 16, ARCADA_WHITE);
+        break;
+    }
 }
 
 void drawEnnemy(Tennemy *currentEnnemy)
@@ -1337,6 +1421,23 @@ void drawEnnemy(Tennemy *currentEnnemy)
             }
             break;
         }
+        case SKEL_ENNEMY:
+        {
+            int DIR = currentEnnemy->speed_x > 0 ? 1 : -1;
+            switch (currentEnnemy->anim_frame)
+            {
+            case 1:
+                drawSprite(px, py, skel_walk1.width, skel_walk1.height, skel_walk1.pixel_data, DIR);
+                break;
+            case 2:
+                drawSprite(px, py, skel_walk2.width, skel_walk2.height, skel_walk2.pixel_data, DIR);
+                break;
+            case 3:
+                drawSprite(px, py, skel_walk3.width, skel_walk3.height, skel_walk3.pixel_data, DIR);
+                break;
+            }
+            break;
+        }
         }
         if (currentEnnemy->bIsAlive >= 127)
         {
@@ -1383,10 +1484,12 @@ void drawTiles()
                 int py = ((wY - worldMIN_Y) * 16) - currentOffset_Y;
                 if ((py < ARCADA_TFT_HEIGHT) && (py > -16))
                 {
-                    uint8_t value = WORLD[wY][wX].id;
+                    TworldTile *brick = &WORLD[wY][wX];
+                    uint8_t value = brick->id;
 
                     int curLight = MAX_LIGHT_INTENSITY;
-                    if (value != BLOCK_AIR)
+                    // @todo gerer la nuit (dans ce cas pas de max light et ground.. ou la lune ?)
+                    if (brick->attr.opaque)// || wY > profondeurColonne)
                     {
                         if (profondeurColonne != 0)
                         {
@@ -1401,7 +1504,7 @@ void drawTiles()
                             {
                                 //Raycast
                                 if (checkCollisionTo(Player.pos.worldX, Player.pos.worldY, wX, wY))
-                                    curLight = curLight + playerLightMask[wY- playerLightStartY][wX - playerLightStartX];
+                                    curLight = curLight + playerLightMask[wY - playerLightStartY][wX - playerLightStartX];
                             }
                         }
                         //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
@@ -1413,13 +1516,21 @@ void drawTiles()
 
                     if (value == BLOCK_AIR)
                     {
+                        if (brick->attr.Level > 0)
+                        {
+                            drawWaterTile(px, py,  brick->attr.Level);                            
+                        }
                         //rien le fond
                     }
                     else if (value == BLOCK_UNDERGROUND_AIR)
                     {
                         //background de terrassement
-                        drawTile(px, py, back_ground.pixel_data, curLight);
-                        // fond du sous terrain : drawSprite(px, py, ground_top.width, ground_top.height, ground_top.pixel_data, 1, curLight);
+                         drawTile(px, py, back_ground.pixel_data, curLight);
+
+                        if (brick->attr.Level > 0)
+                        {
+                            drawWaterTile(px, py, brick->attr.Level);
+                        }
                     }
                     else if (value == BLOCK_GROUND_TOP) //
                     {
@@ -1429,9 +1540,17 @@ void drawTiles()
                     {
                         drawTile(px, py, ground.pixel_data, curLight);
                     }
-                    else if (value == BLOCK_GROUND_ROCK) //
+                    else if (value == BLOCK_GRASS1) //
                     {
-                        drawTile(px, py, rock_empty.pixel_data, curLight);
+                        drawTile(px, py, grass1.pixel_data, curLight);
+                    }
+                    else if (value == BLOCK_GRASS2) //
+                    {
+                        drawTile(px, py, grass2.pixel_data, curLight);
+                    }
+                    else if (value == BLOCK_GRASS3) //
+                    {
+                        drawTile(px, py, grass3.pixel_data, curLight);
                     }
                     else if (value == BLOCK_ROCK) //
                     {
@@ -1449,9 +1568,9 @@ void drawTiles()
                     {
                         drawTile(px, py, rock_fer.pixel_data, curLight);
                     }
-                    else if (value == BLOCK_ARGENT) //
+                    else if (value == BLOCK_DIAMANT) //
                     {
-                        drawTile(px, py, rock_argent.pixel_data, curLight);
+                        drawTile(px, py, rock_diamant.pixel_data, curLight);
                     }
                     else if (value == BLOCK_JADE) //
                     {
@@ -1732,7 +1851,7 @@ void pixelToWorld(int *pX, int *pY)
  * of sight between two locations using Bresenham's line algorithm to
  * draw a line from one point to the other. Returns true if there is
  * line of sight, false if there is no line of sight. */
-#define LOS_DISTANCE    9
+#define LOS_DISTANCE 9
 #if 0
 int los (int los_x_1, int los_y_1, int los_x_2, int
          los_y_2, int level) {
@@ -1845,95 +1964,92 @@ int los (int los_x_1, int los_y_1, int los_x_2, int
 bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y)
 {
     int t, x, y, abs_delta_x, abs_delta_y, sign_x, sign_y, delta_x, delta_y;
- 
+
     if (origin_x == dest_x && origin_y == dest_y)
         return true;
-   /* Delta x is the players x minus the monsters x    *
+    /* Delta x is the players x minus the monsters x    *
     * d is my dungeon structure and px is the players  *
     * x position. origin_x is the monsters x position passed *
     * to the function.                                 */
-   delta_x = dest_x - origin_x;
- 
-   /* delta_y is the same as delta_x using the y coordinates */
-   delta_y = dest_y - origin_y;
- 
-   /* abs_delta_x & abs_delta_y: these are the absolute values of delta_x & delta_y */
-   abs_delta_x = abs(delta_x);
-   abs_delta_y = abs(delta_y);
- 
-   /* sign_x & sign_y: these are the signs of delta_x & delta_y */
-   delta_x > 0 ? sign_x = 1 : sign_x = -1;
-   delta_y > 0 ? sign_y = 1 : sign_y = -1;
- 
-   /* x & y: these are the monster's x & y coords */
-   x = origin_x;
-   y = origin_y;
- 
-   /* The following if statement checks to see if the line *
+    delta_x = dest_x - origin_x;
+
+    /* delta_y is the same as delta_x using the y coordinates */
+    delta_y = dest_y - origin_y;
+
+    /* abs_delta_x & abs_delta_y: these are the absolute values of delta_x & delta_y */
+    abs_delta_x = abs(delta_x);
+    abs_delta_y = abs(delta_y);
+
+    /* sign_x & sign_y: these are the signs of delta_x & delta_y */
+    delta_x > 0 ? sign_x = 1 : sign_x = -1;
+    delta_y > 0 ? sign_y = 1 : sign_y = -1;
+
+    /* x & y: these are the monster's x & y coords */
+    x = origin_x;
+    y = origin_y;
+
+    /* The following if statement checks to see if the line *
     * is x dominate or y dominate and loops accordingly    */
-   if(abs_delta_x > abs_delta_y)
-   {
-      /* X dominate loop */
-      /* t = twice the absolute of y minus the absolute of x*/
-      t = abs_delta_y * 2 - abs_delta_x;
-      do
-      {
-         if(t >= 0)
-         {
-            /* if t is greater than or equal to zero then *
+    if (abs_delta_x > abs_delta_y)
+    {
+        /* X dominate loop */
+        /* t = twice the absolute of y minus the absolute of x*/
+        t = abs_delta_y * 2 - abs_delta_x;
+        do
+        {
+            if (t >= 0)
+            {
+                /* if t is greater than or equal to zero then *
              * add the sign of delta_y to y                    *
              * subtract twice the absolute of delta_x from t   */
-            y += sign_y;
-            t -= abs_delta_x*2;
-         }
- 
-         /* add the sign of delta_x to x      *
+                y += sign_y;
+                t -= abs_delta_x * 2;
+            }
+
+            /* add the sign of delta_x to x      *
           * add twice the adsolute of delta_y to t  */
-         x += sign_x;
-         t += abs_delta_y * 2;
- 
-         /* check to see if we are at the player's position */
-         if (x == dest_x && y == dest_y)
-         {
-            /* return that the monster can see the player */
-            return true;
-         }
-      /* keep looping until the monster's sight is blocked *
+            x += sign_x;
+            t += abs_delta_y * 2;
+
+            /* check to see if we are at the player's position */
+            if (x == dest_x && y == dest_y)
+            {
+                /* return that the monster can see the player */
+                return true;
+            }
+            /* keep looping until the monster's sight is blocked *
        * by an object at the updated x,y coord             */
-      }
-      while(WORLD[y][x].attr.traversable == true);
- 
-      /* NOTE: sight_blocked is a function that returns true      *
+        } while (WORLD[y][x].attr.traversable == true);
+
+        /* NOTE: sight_blocked is a function that returns true      *
        * if an object at the x,y coord. would block the monster's *
        * sight                                                    */
- 
-      /* the loop was exited because the monster's sight was blocked *
-       * return FALSE: the monster cannot see the player             */
-      return false;
-   }
-   else
-   {
-      /* Y dominate loop, this loop is basically the same as the x loop */
-      t = abs_delta_x * 2 - abs_delta_y;
-      do
-      {
-         if(t >= 0)
-         {
-            x += sign_x;
-            t -= abs_delta_y * 2;
-         }
-         y += sign_y;
-         t += abs_delta_x * 2;
-         if(x == dest_x && y == dest_y)
-         {
-            return true;
-         }
-      }
-      while(WORLD[y][x].attr.traversable == true);
-      return false;
-   }
-}
 
+        /* the loop was exited because the monster's sight was blocked *
+       * return FALSE: the monster cannot see the player             */
+        return false;
+    }
+    else
+    {
+        /* Y dominate loop, this loop is basically the same as the x loop */
+        t = abs_delta_x * 2 - abs_delta_y;
+        do
+        {
+            if (t >= 0)
+            {
+                x += sign_x;
+                t -= abs_delta_y * 2;
+            }
+            y += sign_y;
+            t += abs_delta_x * 2;
+            if (x == dest_x && y == dest_y)
+            {
+                return true;
+            }
+        } while (WORLD[y][x].attr.traversable == true);
+        return false;
+    }
+}
 
 void calculatePlayerCoords()
 {
@@ -2207,7 +2323,7 @@ void computePlayerAnimations()
     }
     else
     {
-        if (Player.bJumping)
+        if (Player.bJumping || Player.bDoubleJumping)
         {
             set_jumping();
         }
@@ -2370,7 +2486,7 @@ void updateEnnemyIA(Tennemy *currentEnnemy)
         int distX = abs(currentEnnemy->worldX - Player.pos.worldX);
         int distY = abs(currentEnnemy->worldY - Player.pos.worldY);
         //if ((currentEnnemy->worldX >= 1) && (currentEnnemy->worldX <= worldMAX_X))
-        if ((distX < 30) && (distY < 20))
+        if ((distX < WORLD_WIDTH / 2) && (distY < WORLD_HEIGHT / 2))
         {
             currentEnnemy->bIsActive = true;
             //Deplacement
@@ -2414,7 +2530,47 @@ void updateEnnemyIA(Tennemy *currentEnnemy)
                     }
                 }
             }
-            //speed x et speed y (jump)
+            else if (currentEnnemy->type == SKEL_ENNEMY)
+            {
+                if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
+                    currentEnnemy->speed_x = SKEL_WALKING_SPEED;
+                else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
+                    currentEnnemy->speed_x = -SKEL_WALKING_SPEED;
+
+                if (currentEnnemy->worldY == Player.pos.worldY)
+                {
+                    int dist = currentEnnemy->worldX - Player.pos.worldX;
+                    if (dist < 0 && dist > -5)
+                    {
+                        currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
+                    }
+                    else if (dist > 0 && dist < 5)
+                    {
+                        currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
+                    }
+                }
+                else
+                {
+                    //On essaie de pas tomber
+                    if (currentEnnemy->speed_x <= 0)
+                    {
+                        TworldTile tileBL = getWorldAtPix((currentEnnemy->x + currentEnnemy->speed_x), currentEnnemy->y + 16);
+                        if (tileBL.attr.traversable)
+                        {
+                            currentEnnemy->speed_x = -currentEnnemy->speed_x;
+                        }
+                    }
+                    else
+                    {
+                        TworldTile tileBR = getWorldAtPix((currentEnnemy->x + currentEnnemy->speed_x) + 15, currentEnnemy->y + 16);
+                        if (tileBR.attr.traversable)
+                        {
+                            currentEnnemy->speed_x = -currentEnnemy->speed_x;
+                        }
+                    }
+                }
+
+            } //speed x et speed y (jump)
         }
         else
             currentEnnemy->bIsActive = false;
@@ -2459,6 +2615,7 @@ void updateItems()
         }
     }
 }
+
 void checkItemCollisionsWorld(Titem *currentItem)
 {
     //Y
@@ -2499,6 +2656,16 @@ void checkItemCollisionsWorld(Titem *currentItem)
 
     currentItem->worldX = currentItem->x / 16;
     currentItem->worldY = currentItem->y / 16;
+}
+
+void updateWorld() 
+{
+    //on fait les verifications sur les briques, les anims, etc, repousser l'herbe sur les hauteur (ground top et herbes)
+
+
+    //gestion de l'eau...
+    if (everyXFrames(2))
+        WATER_Update();
 }
 
 void updatePlayerVelocities()
@@ -2551,21 +2718,25 @@ void checkPlayerCollisionsWorld()
     //X
     if (Player.pos.speedX <= 0)
     {
-        TworldTile tileTL = getWorldAtPix(Player.pos.newX, Player.pos.pY);
-        TworldTile tileBL = getWorldAtPix(Player.pos.newX, Player.pos.pY + 15);
+        // +0 +0
+        // +0 +15
+        TworldTile tileTL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + PLAYER_Y_BDM);
+        TworldTile tileBL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + 15);
         if ((!tileTL.attr.traversable) || (!tileBL.attr.traversable))
         {
-            Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + 16;
+            Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + (16 - PLAYER_X_BDM);
             Player.pos.speedX = 0;
         }
     }
     else
     {
-        TworldTile tileTR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY);
-        TworldTile tileBR = getWorldAtPix(Player.pos.newX + 16, Player.pos.pY + 15);
+        // +16 +0
+        // +16 +15
+        TworldTile tileTR = getWorldAtPix(Player.pos.newX + (16 - PLAYER_X_BDM), Player.pos.pY + PLAYER_Y_BDM);
+        TworldTile tileBR = getWorldAtPix(Player.pos.newX + (16 - PLAYER_X_BDM), Player.pos.pY + 15);
         if ((!tileTR.attr.traversable) || (!tileBR.attr.traversable))
         {
-            Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16));
+            Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + PLAYER_X_BDM;
             Player.pos.speedX = 0;
         }
     }
@@ -2576,11 +2747,13 @@ void checkPlayerCollisionsWorld()
     if (Player.pos.speedY <= 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        TworldTile tileTL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY);
-        TworldTile tileTR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY);
+        // +0 +0
+        // +15 +0
+        TworldTile tileTL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.newY + PLAYER_Y_BDM);
+        TworldTile tileTR = getWorldAtPix(Player.pos.newX + (15 - PLAYER_X_BDM), Player.pos.newY + PLAYER_Y_BDM);
         if ((!tileTL.attr.traversable) || (!tileTR.attr.traversable))
         {
-            Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16)) + 16;
+            Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16)) + (16 - PLAYER_Y_BDM); // - PLAYER_Y_BDM ??
             Player.pos.speedY = 0;
         }
         else
@@ -2592,13 +2765,18 @@ void checkPlayerCollisionsWorld()
     {
         Player.bFalling = true;
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        TworldTile tileBL = getWorldAtPix(Player.pos.newX + 0, Player.pos.newY + 16);
-        TworldTile tileBR = getWorldAtPix(Player.pos.newX + 15, Player.pos.newY + 16);
+        // +0 +16
+        // +15 +16
+
+        TworldTile tileBL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.newY + 16);
+        TworldTile tileBR = getWorldAtPix(Player.pos.newX + (15 - PLAYER_X_BDM), Player.pos.newY + 16);
         if ((!tileBL.attr.traversable) || (!tileBR.attr.traversable))
         {
             Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16));
             Player.bOnGround = true;
             Player.bFalling = false;
+            //On peut de nouveau realiser un double jump
+            Player.bDoubleJumping = false;
             Player.pos.speedY = 0;
         }
     }
@@ -2712,15 +2890,27 @@ void checkPlayerInputs()
                     tile.id = BLOCK_UNDERGROUND_AIR;
                     tile.attr.life = BLOCK_LIFE_NA;
                     tile.attr.traversable = 1;
+                    tile.attr.opaque = 1;
                 }
                 else
                 {
                     // @todo span herbe
                     //createDropFrom(Player.cible_wX, Player.cible_wY, tile.id);
 
+                    //On enleve l'herbe si il y en avait
+                    TworldTile brick = getWorldAt(Player.cible_wX, Player.cible_wY-1);
+                    if (brick.id == BLOCK_GRASS1 || brick.id == BLOCK_GRASS2 || brick.id == BLOCK_GRASS3)
+                    {
+                        brick.id = BLOCK_AIR;
+                        brick.attr.life = BLOCK_LIFE_NA;
+                        brick.attr.traversable = 1;
+                        brick.attr.opaque = 0;
+                        setWorldAt(Player.cible_wX, Player.cible_wY-1, brick);
+                    }
                     tile.id = BLOCK_AIR;
                     tile.attr.life = BLOCK_LIFE_NA;
                     tile.attr.traversable = 1;
+                    tile.attr.opaque = 0;
                 }
 
                 // @todo : tester le type de tile
@@ -2756,13 +2946,14 @@ void checkPlayerInputs()
                 //Spawn Effect
                 set_double_jump_fx();
             }
-            else if (!Player.bOnGround && Player.pos.speedY < FALLING_SPEED)
+            else if (!Player.bOnGround && !Player.bDoubleJumping && Player.pos.speedY < FALLING_SPEED)
             {
                 // @todo spawn dust double jump
                 Player.bWantDoubleJump = true;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
                 Player.pos.speedY = -DOUBLE_JUMP_SPEED;
+                Player.bDoubleJumping = true;
                 //Spawn Effect
                 set_double_jump_fx(true);
             }
@@ -2835,6 +3026,8 @@ void updateGame()
 
         updateEnnemies();
         updateItems();
+
+        updateWorld();
 
         lastX = cameraX;
     }
@@ -3083,14 +3276,16 @@ bool LoadGame(uint8_t numEmplacement)
         {
             for (int wX = 0; wX < WORLD_WIDTH; wX++)
             {
-                char buff[5];
+                char buff[8];
                 buff[0] = data.read();
                 buff[1] = data.read();
                 buff[2] = data.read();
-                buff[3] = 0;
+                buff[3] = data.read();
+                buff[4] = data.read();
+                buff[5] = 0;
                 data.read(); // ,
                 int value = strtol(buff, 0, 10);
-                WORLD[wY][wX].attr.RAW = (uint8_t)value;
+                WORLD[wY][wX].attr.RAW = (uint16_t)value;
             }
         }
         data.read(); //  ]
@@ -3139,13 +3334,15 @@ bool SaveGame(uint8_t numEmplacement)
         {
             for (int wX = 0; wX < WORLD_WIDTH; wX++)
             {
-                uint8_t value = WORLD[wY][wX].attr.RAW;
-                char buff[5];
-                sprintf(buff, "%03d,", value);
+                uint16_t value = WORLD[wY][wX].attr.RAW;
+                char buff[8];
+                sprintf(buff, "%05d,", value);
                 data.write(buff[0]);
                 data.write(buff[1]);
                 data.write(buff[2]);
                 data.write(buff[3]);
+                data.write(buff[4]);
+                data.write(buff[5]);
             }
         }
         data.write(']');

@@ -30,9 +30,9 @@
     } Tennemy;
 
 
-    #define MAX_SPIDERS 100
-    #define MAX_ZOMBIES 50
-    #define MAX_SKELS   25
+    #define MAX_SPIDERS 85
+    #define MAX_ZOMBIES 65
+    #define MAX_SKELS   50
     #define MAX_ENNEMIES MAX_SPIDERS+MAX_ZOMBIES+MAX_SKELS
 
     Tennemy ENNEMIES[MAX_ENNEMIES];

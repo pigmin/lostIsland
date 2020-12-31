@@ -100,7 +100,7 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            if (coeff == 0)
+            if (coeff <= 0.04f)
               canvas->drawPixel(xMove + i, yMove, ARCADA_BLACK);
             else
             {
@@ -125,7 +125,7 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
           //        Serial.printf("%0,", value);
           if (value != 0xF81F)
           {
-            if (coeff == 0)
+            if (coeff <= 0.04f)
               canvas->drawPixel((xMove + width - 1) - i, yMove, ARCADA_BLACK);
             else
             {
@@ -143,6 +143,54 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
   }
 
   //  Serial.println("");
+}
+
+void drawWaterTile(int16_t px, int16_t py, int waterLevel)
+{
+  int r, g, b = 0;
+  switch (waterLevel)
+  {
+    case 7:
+      r = 5;
+      g = 26;
+      b = 115;
+      break;
+    case 6:
+      r = 6;
+      g = 35;
+      b = 131;
+      break;
+    case 5:
+      r = 2;
+      g = 51;
+      b = 147;
+      break;
+    case 4:
+      r = 0;
+      g = 116;
+      b = 201;
+      break;
+    case 3:
+      r = 0;
+      g = 162;
+      b = 249;
+      break;
+    case 2:
+      r = 0;
+      g = 196;
+      b = 249;
+      break;
+    case 1:
+      r = 22;
+      g = 239;
+      b = 249;
+      break;
+    
+    default:
+      return;
+      
+  }
+  canvas->fillRect(px, py, 16, 16, rgbTo565(r, g, b));  
 }
 
 void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light)
@@ -168,8 +216,7 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
   }
   else
   {
-    float coeff = (float)light / MAX_LIGHT_INTENSITY;
-    if (coeff == 0)
+    if (light == 0)
     {
       for (int16_t j = 0; j < 16; j++, yMove++)
       {
@@ -186,6 +233,8 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
     }
     else
     {
+      float coeff = (float)light / MAX_LIGHT_INTENSITY;
+
       for (int16_t j = 0; j < 16; j++, yMove++)
       {
         for (int16_t i = 0; i < 16; i++)
@@ -194,7 +243,7 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            if (coeff == 0)
+            if (coeff <= 0.04f)
               canvas->drawPixel(xMove + i, yMove, ARCADA_BLACK);
             else
             {

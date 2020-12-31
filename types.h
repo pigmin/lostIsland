@@ -5,6 +5,11 @@
 
 #define MAX_ITEMS 32
 
+//Bande morte sur l'axe X (ignorée par les tests de collision)
+#define PLAYER_X_BDM  4
+//Idem axe Y mais seulement en haut (les pieds sont sur le sol)
+#define PLAYER_Y_BDM  4
+
 typedef struct TPos
 {
   int pX, pY;
@@ -48,6 +53,7 @@ typedef struct TPlayer
   bool bWalking;
   bool bOnGround;
   bool bTouched;
+  bool bDoubleJumping;
 
   bool bWantWalk;
   bool bWantJump;
@@ -111,11 +117,7 @@ typedef struct Enemy
 #define  BLOCK_LIFE_7     7
 
 
-typedef union {
-
-  uint16_t RAW;
-  
-  struct {
+typedef struct {
       uint8_t id;
       union {
         struct {
@@ -123,14 +125,18 @@ typedef union {
           uint8_t opaque:1;
           //uint8_t underground:1; //pour le moment on stocke le underground par rapport a la hauteur originelle..a voir..
           //uint8_t animated:1;
-          uint8_t life:3;
-          uint8_t _spare:3;
-        };
-        uint8_t RAW;
-      } attr;
-      
-  };
+          uint8_t life:4;
 
+          //Water simu
+          uint8_t NoCalc:1;
+          uint8_t Direction:2;
+          uint8_t Level:3;
+
+
+          uint8_t __spare:4;
+        };
+        uint16_t RAW;
+      } attr;
 } TworldTile;
 
 

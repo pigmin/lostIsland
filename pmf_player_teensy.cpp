@@ -127,7 +127,7 @@ void mod_audio_stream::update()
 //---------------------------------------------------------------------------
 
 static mod_audio_stream s_mod_stream;
-extern AudioMixer4     mixer1;
+extern AudioMixer4     mixerMOD;
 //---------------------------------------------------------------------------
 
 
@@ -145,7 +145,7 @@ void pmf_player::start_playback(uint32_t sampling_freq_)
   // setup
   //AudioMemory(2);
 
-  s_mod_stream.init(mixer1, PMF_USE_STEREO_MIXING?true:false);
+  s_mod_stream.init(mixerMOD, PMF_USE_STEREO_MIXING?true:false);
 }
 //----
 

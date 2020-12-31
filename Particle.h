@@ -40,6 +40,8 @@ class Particles {
         ~Particles();
         void moveParticles();
         void createExplosion(int x, int y, int num_parts, uint16_t color = 0xFFFFFF, int life = -1);
+        void createBodyExplosion(int x, int y, int num_parts, uint16_t color = 0xFFFFFF, int life = -1);
+
         void createDust(int x, int y, int num_parts, int xspeed, int yspeed, int life = -1);
         int getActiveParticles();
         void clearParticles();

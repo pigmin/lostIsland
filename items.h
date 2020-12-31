@@ -3,15 +3,14 @@
 
 
 #define ITEM_NONE           0
-#define ITEM_GROUND_ROCK    BLOCK_GROUND_ROCK  //0x03
 #define ITEM_ROCK           BLOCK_ROCK  //0x10
 #define ITEM_CHARBON        BLOCK_CHARBON
-#define ITEM_CUIVRE         BLOCK_CUIVRE
 #define ITEM_FER            BLOCK_FER
-#define ITEM_ARGENT         BLOCK_ARGENT
-#define ITEM_JADE           BLOCK_JADE
+#define ITEM_CUIVRE         BLOCK_CUIVRE
 #define ITEM_OR             BLOCK_OR
 #define ITEM_REDSTONE       BLOCK_REDSTONE  //0x17
+#define ITEM_DIAMANT        BLOCK_DIAMANT
+#define ITEM_JADE           BLOCK_JADE
 
 typedef struct Titem {
     int worldX;
