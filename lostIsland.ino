@@ -1133,6 +1133,7 @@ void initWorld()
     {
         int curP = WORLD[REF_ROW][4+nbW].id;
         WORLD[(curP-1)][4+nbW].attr.Level = MAX_WATER_LEVEL;
+        WORLD[(curP-2)][4+nbW].attr.Level = MAX_WATER_LEVEL/2;
     }
     
 
@@ -1518,19 +1519,21 @@ void drawTiles()
                     {
                         if (brick->attr.Level > 0)
                         {
-                            drawWaterTile(px, py,  brick->attr.Level);                            
+                            drawWaterTile(px, py, NULL, curLight, brick->attr.Level, brick->attr.Direction);
                         }
                         //rien le fond
                     }
                     else if (value == BLOCK_UNDERGROUND_AIR)
                     {
                         //background de terrassement
-                         drawTile(px, py, back_ground.pixel_data, curLight);
-
+                        
                         if (brick->attr.Level > 0)
                         {
-                            drawWaterTile(px, py, brick->attr.Level);
+                            drawWaterTile(px, py, back_ground.pixel_data, curLight, brick->attr.Level, brick->attr.Direction);
                         }
+                        else
+                            drawTile(px, py, back_ground.pixel_data, curLight);
+
                     }
                     else if (value == BLOCK_GROUND_TOP) //
                     {
@@ -1600,10 +1603,6 @@ void drawTiles()
                     else
                     {
                         drawTile(px, py, rock_empty.pixel_data, curLight);
-                        /*                        int R = (75 + value) * (curLight / MAX_LIGHT_INTENSITY);
-                        int G = (72 + value) * (curLight / MAX_LIGHT_INTENSITY);
-                        int B = (59 + value) * (curLight / MAX_LIGHT_INTENSITY);
-                        canvas->fillRect(px, py, 16, 16, rgbTo565(R, G, B));*/
                     }
                     /*
                     else if (WORLD[wY][wX].id == 'o') //16 coin
@@ -1769,57 +1768,7 @@ void drawHud()
     arcada.pixels.show();
 }
 
-#if 0
-void lightMask() {
 
-    int lightX = (Player.pos.pX - cameraX) + 8;
-    int lightY = (Player.pos.pY - cameraY) + 8;
-
-    int startX = lightX - 32;
-    int startY = lightY - 32;
-    int endX = startX + 64;
-    int endY = startY + 64;
-
-    int screenStartX = max(0, startX);
-    int screenStartY = max(0, startY);
-    int screenEndX = min(ARCADA_TFT_WIDTH - 1, endX);
-    int screenEndY = min(ARCADA_TFT_HEIGHT - 1, endY);
-
-    for (int pX = 0; pX < 160; pX++)
-        for (int pY = 0; pY < 128; pY++)
-        {
-            uint16_t value = canvas->getPixel(pX, pY);
-            if (value != 0x867D)
-            {
-                //pour le moment float ?
-                if (pX >= startX && pX < endX && pY >= startY && pY < endY) 
-                {
-                    float dist = sqrt((pX-lightX)*(pX-lightX) + (pY-lightY)*(pY-lightY));
-                    int curLight = (PLAYER_LIGHT_INTENSITY*20 / dist);
-                    
-                    curLight = min(curLight, MAX_LIGHT_INTENSITY);
-                    float coeff = (float)curLight / MAX_LIGHT_INTENSITY;
-                    uint16_t value = canvas->getPixel(pX, pY);
-                    if (value != 0x867D)
-                    {
-                        if (coeff == 0)
-                            canvas->drawPixel(pX, pY, ARCADA_BLACK);
-                        else
-                        {
-                        uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
-                        uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
-                        uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
-                        value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
-                        canvas->drawPixel(pX, pY, value);
-                        }            
-                    }
-                }
-                else
-                    canvas->drawPixel(pX, pY, ARCADA_BLACK);
-            }
-        }
-}
-#endif
 
 void drawWorld()
 {
@@ -1828,8 +1777,6 @@ void drawWorld()
     drawEnnemies();
 
     drawItems();
-
-    //lightMask();
 
     drawPlayer();
 
@@ -2665,7 +2612,11 @@ void updateWorld()
 
     //gestion de l'eau...
     if (everyXFrames(2))
+    {
+        uint32_t now = micros();
         WATER_Update();
+        Serial.printf("WatUpd:%d\n", micros() - now);
+    }
 }
 
 void updatePlayerVelocities()
@@ -3456,7 +3407,8 @@ void loop()
 
     //elapsedTime = millis() - now;
 
-    //Serial.printf("LFD:%d\n", lastFrameDurationMs);
+   //if (lastFrameDurationMs > (1000/FPS))
+   // Serial.printf("LFD:%d\n", lastFrameDurationMs);
 }
 
 void anim_player_idle()

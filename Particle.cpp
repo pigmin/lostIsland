@@ -161,7 +161,7 @@ void Particles::createDust(int x, int y, int num_parts, int xspeed, int yspeed, 
         particle.velX = xspeed;
         particle.velY = yspeed;
         uint8_t bright = random(200,255);
-        particle.color = rgbTo565(bright, bright, bright);
+        particle.color = RGBConvert(bright, bright, bright);
         
         addParticle(&particle);
     }

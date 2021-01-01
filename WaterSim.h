@@ -10,6 +10,8 @@
         #define Direction_Bottom           1
         #define Direction_Left             2
         #define Direction_Right            4
+        #define Direction_Bottom_Left      Direction_Bottom | Direction_Left
+        #define Direction_Bottom_Right     Direction_Bottom | Direction_Right
         #define Direction_RightLeft        Direction_Left | Direction_Right
         #define Direction_All              Direction_Left | Direction_Right | Direction_Bottom
 

@@ -128,7 +128,6 @@ typedef struct {
           uint8_t life:4;
 
           //Water simu
-          uint8_t NoCalc:1;
           uint8_t Direction:2;
           uint8_t Level:3;
 

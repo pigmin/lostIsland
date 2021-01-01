@@ -5,12 +5,6 @@
 
 extern GFXcanvas16 *canvas;
 
-uint16_t rgbTo565(uint8_t red, uint8_t green, uint8_t blue)
-{
-  uint16_t Rgb565 = (((red & 0xf8) << 8) + ((green & 0xfc) << 3) + (blue >> 3));
-
-  return Rgb565;
-}
 /*
 void PixelGameEngine::DrawSprite(int32_t x, int32_t y, Sprite* sprite, uint32_t scale, uint8_t flip)
 	{
@@ -88,8 +82,6 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
   }
   else
   {
-    float coeff = (float)light / MAX_LIGHT_INTENSITY;
-
     if (DIR > 0)
     {
       for (int16_t j = 0; j < height; j++, yMove++)
@@ -100,16 +92,7 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            if (coeff <= 0.04f)
-              canvas->drawPixel(xMove + i, yMove, ARCADA_BLACK);
-            else
-            {
-              uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
-              uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
-              uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
-              value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
-              canvas->drawPixel(xMove + i, yMove, value);
-            }
+              canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
           }
         }
         //    Serial.println("");
@@ -125,16 +108,7 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
           //        Serial.printf("%0,", value);
           if (value != 0xF81F)
           {
-            if (coeff <= 0.04f)
-              canvas->drawPixel((xMove + width - 1) - i, yMove, ARCADA_BLACK);
-            else
-            {
-              uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
-              uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
-              uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
-              value = rgbTo565(r * coeff, g * coeff, b * coeff);
-              canvas->drawPixel((xMove + width - 1) - i, yMove, value);
-            }
+              canvas->drawPixel((xMove + width - 1) - i, yMove, lightBlendRGB565(value, light));
           }
         }
         //    Serial.println("");
@@ -145,52 +119,115 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
   //  Serial.println("");
 }
 
-void drawWaterTile(int16_t px, int16_t py, int waterLevel)
+void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light, uint8_t waterLevel, uint8_t Direction)
 {
-  int r, g, b = 0;
+  uint16_t waterColor = 0;
+  uint8_t valAlpha = 0;
   switch (waterLevel)
   {
-    case 7:
-      r = 5;
-      g = 26;
-      b = 115;
-      break;
-    case 6:
-      r = 6;
-      g = 35;
-      b = 131;
-      break;
-    case 5:
-      r = 2;
-      g = 51;
-      b = 147;
-      break;
-    case 4:
-      r = 0;
-      g = 116;
-      b = 201;
-      break;
-    case 3:
-      r = 0;
-      g = 162;
-      b = 249;
-      break;
-    case 2:
-      r = 0;
-      g = 196;
-      b = 249;
-      break;
-    case 1:
-      r = 22;
-      g = 239;
-      b = 249;
-      break;
-    
-    default:
-      return;
-      
+  case 7:
+    waterColor = RGBConvert(0,56,114);
+    valAlpha = ALPHA_25;
+    break;
+  case 6:
+    waterColor = RGBConvert(0,105,212);
+    valAlpha = ALPHA_37;
+    break;
+  case 5:
+    waterColor = RGBConvert(6,130,255);
+    valAlpha = ALPHA_50;
+    break;
+  case 4:
+    waterColor = RGBConvert(55,154,255);
+    valAlpha = ALPHA_60;
+    break;
+  case 3:
+    waterColor = RGBConvert(104,179,255);
+    valAlpha = ALPHA_66;
+    break;
+  case 2:
+    waterColor = RGBConvert(153,203,255);
+    valAlpha = ALPHA_75;
+    break;
+  case 1:
+    waterColor = RGBConvert(201,228,254);
+    valAlpha = ALPHA_75;
+    break;
+
+  default:
+    return;
   }
-  canvas->fillRect(px, py, 16, 16, rgbTo565(r, g, b));  
+  if (bitmap)
+  {
+    uint16_t idx = 0;
+
+    if (light < 0 || light == MAX_LIGHT_INTENSITY)
+    {
+
+      for (int16_t j = 0; j < 16; j++, yMove++)
+      {
+        for (int16_t i = 0; i < 16; i++)
+        {
+          uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
+          //   Serial.printf("%d,", value);
+          if (value != 0xF81F)
+          {
+            canvas->drawPixel(xMove + i, yMove, alphaBlendRGB565(value, waterColor, valAlpha));
+          }
+        }
+        //    Serial.println("");
+      }
+    }
+    else if (light == 0)
+    {
+      for (int16_t j = 0; j < 16; j++, yMove++)
+      {
+        for (int16_t i = 0; i < 16; i++)
+        {
+          uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
+          //   Serial.printf("%d,", value);
+          if (value != 0xF81F)
+          {
+            canvas->drawPixel(xMove + i, yMove, ARCADA_BLACK);
+          }
+        }
+      }
+    }
+    else
+    {
+      for (int16_t j = 0; j < 16; j++, yMove++)
+      {
+        for (int16_t i = 0; i < 16; i++)
+        {
+          uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
+          //   Serial.printf("%d,", value);
+          if (value != 0xF81F)
+          {
+            //color blend            
+            value = alphaBlendRGB565(value, waterColor, valAlpha);
+            //light blend
+            value = lightBlendRGB565(value, light);
+            canvas->drawPixel(xMove + i, yMove, value);
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    if (light < 0 || light == MAX_LIGHT_INTENSITY)
+    {
+      canvas->fillRect(xMove, yMove, 16, 16, waterColor);
+    }
+    else if (light == 0)
+    {
+      canvas->fillRect(xMove, yMove, 16, 16, ARCADA_BLACK);
+    }
+    else
+    {
+      canvas->fillRect(xMove, yMove, 16, 16, lightBlendRGB565(waterColor, light));
+    }
+  }
 }
 
 void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light)
@@ -233,7 +270,6 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
     }
     else
     {
-      float coeff = (float)light / MAX_LIGHT_INTENSITY;
 
       for (int16_t j = 0; j < 16; j++, yMove++)
       {
@@ -243,16 +279,7 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            if (coeff <= 0.04f)
-              canvas->drawPixel(xMove + i, yMove, ARCADA_BLACK);
-            else
-            {
-              uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
-              uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
-              uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
-              value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
-              canvas->drawPixel(xMove + i, yMove, value);
-            }
+              canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
           }
         }
       }
@@ -262,89 +289,48 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
   //  Serial.println("");
 }
 
-void drawTile2(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int curLight_TL, int curLight_BR, int lightX, int lightY)
+// Fast RGB565 pixel blending
+// Found in a pull request for the Adafruit framebuffer library. Clever!
+// https://github.com/tricorderproject/arducordermini/pull/1/files#diff-d22a481ade4dbb4e41acc4d7c77f683d
+uint16_t alphaBlendRGB565(uint32_t fg, uint32_t bg, uint8_t alpha)
 {
-  uint16_t idx = 0;
+  // Alpha converted from [0..255] to [0..31]
+  alpha = (alpha + 4) >> 3;
 
-  if (curLight_TL < 0 || curLight_TL == MAX_LIGHT_INTENSITY)
-  {
+  // Converts  0000000000000000rrrrrggggggbbbbb
+  //     into  00000gggggg00000rrrrr000000bbbbb
+  // with mask 00000111111000001111100000011111
+  // This is useful because it makes space for a parallel fixed-point multiply
+  bg = (bg | (bg << 16)) & 0b00000111111000001111100000011111;
+  fg = (fg | (fg << 16)) & 0b00000111111000001111100000011111;
 
-    for (int16_t j = 0; j < 16; j++, yMove++)
-    {
-      for (int16_t i = 0; i < 16; i++)
-      {
-        uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
-        //   Serial.printf("%d,", value);
-        if (value != 0xF81F)
-        {
-          canvas->drawPixel(xMove + i, yMove, value);
-        }
-      }
-      //    Serial.println("");
-    }
-  }
-  else
-  {
-    float coeff = (float)curLight_TL / MAX_LIGHT_INTENSITY;
-    if (coeff == 0)
-    {
-      for (int16_t j = 0; j < 16; j++, yMove++)
-      {
-        for (int16_t i = 0; i < 16; i++)
-        {
-          uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
-          //   Serial.printf("%d,", value);
-          if (value != 0xF81F)
-          {
-            canvas->drawPixel(xMove + i, yMove, ARCADA_BLACK);
-          }
-        }
-      }
-    }
-    else
-    {
+  // This implements the linear interpolation formula: result = bg * (1.0 - alpha) + fg * alpha
+  // This can be factorized into: result = bg + (fg - bg) * alpha
+  // alpha is in Q1.5 format, so 0.0 is represented by 0, and 1.0 is represented by 32
+  uint32_t result = (fg - bg) * alpha; // parallel fixed-point multiply of all components
+  result >>= 5;
+  result += bg;
+  result &= 0b00000111111000001111100000011111; // mask out fractional parts
+  return (uint16_t)((result >> 16) | result);   // contract result
+}
 
-      float stepY = (curLight_BR - curLight_TL) / 16;
+uint16_t lightBlendRGB565(uint32_t fg, uint8_t alpha)
+{
+  // Alpha converted from [0..255] to [0..31]
+  alpha = (alpha + 4) >> 3;
 
-      for (int16_t j = 0; j < 16; j++, yMove++)
-      {
-        for (int16_t i = 0; i < 16; i++)
-        {
-          int px = xMove + i;
-          int py = yMove;
-          
-          float curLight = curLight_TL + (stepY * j);
+  // Converts  0000000000000000rrrrrggggggbbbbb
+  //     into  00000gggggg00000rrrrr000000bbbbb
+  // with mask 00000111111000001111100000011111
+  // This is useful because it makes space for a parallel fixed-point multiply
 
-            float distPlayer = sqrt((lightX - px) * (lightX - px) + (lightY - py) * (lightY - py));
-            // @todo gerer la non propagassion de la lumiere dans les murs...
-            if (distPlayer < 64)
-            {
-                curLight = curLight + (PLAYER_LIGHT_INTENSITY / distPlayer);
-            }
-            curLight = min(curLight, MAX_LIGHT_INTENSITY);
-            float coeff = (float)curLight / MAX_LIGHT_INTENSITY;
+  fg = (fg | (fg << 16)) & 0b00000111111000001111100000011111;
 
-          uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
-          //   Serial.printf("%d,", value);
-          if (value != 0xF81F)
-          {
-            if (coeff == 0)
-              canvas->drawPixel(px, py, ARCADA_BLACK);
-            else
-            {
-              uint8_t r = ((((value >> 11) & 0x1F) * 527) + 23) >> 6;
-              uint8_t g = ((((value >> 5) & 0x3F) * 259) + 33) >> 6;
-              uint8_t b = (((value & 0x1F) * 527) + 23) >> 6;
-              value = rgbTo565(int(r * coeff), int(g * coeff), int(b * coeff));
-              canvas->drawPixel(px, py, value);
-            }
-            
-          }
-        }
-        
-     }
-    }
-  }
-
-  //  Serial.println("");
+  // This implements the linear interpolation formula: result = bg * (1.0 - alpha) + fg * alpha
+  // This can be factorized into: result = bg + (fg - bg) * alpha
+  // alpha is in Q1.5 format, so 0.0 is represented by 0, and 1.0 is represented by 32
+  uint32_t result = (fg)*alpha; // parallel fixed-point multiply of all components
+  result >>= 5;
+  result &= 0b00000111111000001111100000011111; // mask out fractional parts
+  return (uint16_t)((result >> 16) | result);   // contract result
 }

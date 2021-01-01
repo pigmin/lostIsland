@@ -45,15 +45,6 @@ int currentCellX = 0, currentCellY = 0;
                     WATER_UpdateFluidCell2(x, y);
                 }
             }
-            // loop from bottom to top
-            for (int y = WORLD_HEIGHT - 1; y >= 0; y--)
-            {
-                // loop from right to left
-                for (int x = 0; x < WORLD_WIDTH; x++)
-                {
-                    WORLD[y][x].attr.NoCalc = 0;
-                }
-            }
         }
 #if 0
         public void DebugRender(SpriteBatch sb, SpriteFont font, Texture2D white)
@@ -75,11 +66,6 @@ int currentCellX = 0, currentCellY = 0;
                     {
                         var c = ((float)cell->attr.Level / (float)MAX_WATER_LEVEL);
                         sb.Draw(white, new Rectangle(x * Cell->RenderWidth, y * Cell->RenderHeight, Cell->RenderWidth, Cell->RenderHeight), Color.Blue * c);
-                    }
-
-                    if (cell->attr.NoCalc)
-                    {
-                        sb.Draw(white, new Rectangle(x * Cell->RenderWidth, y * Cell->RenderHeight, Cell->RenderWidth, Cell->RenderHeight), Color.Orange * 0.6f);
                     }
 
                     //var size = font.MeasureString(cell->attr.Level.ToString());
@@ -153,7 +139,7 @@ int currentCellX = 0, currentCellY = 0;
                     cell->attr.Level = FlowBottom(cell, bottomCell);
                     break;
                     
-                case Direction_Bottom | Direction_Left:
+                case Direction_Bottom_Left:
                     leftOverFluid = FlowBottom(cell, bottomCell);
                     if (leftOverFluid > 0)
                     {
@@ -161,7 +147,7 @@ int currentCellX = 0, currentCellY = 0;
                     }
                     break;
 
-                case Direction_Bottom | Direction_Right:
+                case Direction_Bottom_Right:
                     leftOverFluid = FlowBottom(cell, bottomCell);
                     if (leftOverFluid > 0)
                     {
@@ -197,10 +183,8 @@ int currentCellX = 0, currentCellY = 0;
             int remainder = (rightCell->attr.Level + cell->attr.Level) % 2;
 
             rightCell->attr.Level = amountToSpread + remainder;
-            rightCell->attr.NoCalc = 1;
             rightCell->attr.Direction = Direction_Right;
             cell->attr.Level = amountToSpread;
-            cell->attr.NoCalc = 1;
         }
 
         void FlowLeft(TworldTile* cell, TworldTile* leftCell)
@@ -209,10 +193,9 @@ int currentCellX = 0, currentCellY = 0;
             int remainder = (leftCell->attr.Level + cell->attr.Level) % 2;
 
             leftCell->attr.Level = amountToSpread + remainder;
-            leftCell->attr.NoCalc = 1;
             leftCell->attr.Direction = Direction_Left;
             cell->attr.Level = amountToSpread;
-            cell->attr.NoCalc = 1;
+
         }
 
         void FlowLeftRight(TworldTile* cell, TworldTile* leftCell, TworldTile* rightCell)
@@ -247,10 +230,7 @@ int currentCellX = 0, currentCellY = 0;
             }
 
             cell->attr.Level = amountToSpread;
-            cell->attr.NoCalc = 1;
             cell->attr.Direction = Direction_None;
-            leftCell->attr.NoCalc = 1;
-            rightCell->attr.NoCalc = 1;
         }
 
         int FlowBottom(TworldTile* cell, TworldTile* bottomCell)
@@ -263,10 +243,8 @@ int currentCellX = 0, currentCellY = 0;
 
             // move all fluid that can be moved
             bottomCell->attr.Level += amountToMove;
-            bottomCell->attr.NoCalc = 1;
             bottomCell->attr.Direction = Direction_None;
             cell->attr.Level -= amountToMove;
-            cell->attr.NoCalc = 1;
 
             return cell->attr.Level;
         }
