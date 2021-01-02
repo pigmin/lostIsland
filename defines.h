@@ -22,6 +22,8 @@
 #define MAX_DENSITE 8
 #define AMPLITUDE_DENSITE 16
 
+#define MAX_TREES       30
+
 #define HUD_ITEMS_X 16
 #define HUD_ITEMS_Y ARCADA_TFT_HEIGHT - 18
 

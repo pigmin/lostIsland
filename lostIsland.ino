@@ -103,6 +103,13 @@ static const uint32_t PROGMEM pmf_aceman[] =
 #include "res/or_small.c"
 #include "res/redstone_small.c"
 
+#include "res2/tree1.c"
+#include "res2/tree2.c"
+#include "res2/tree3.c"
+
+
+#include "res2/background_day.c"
+
 #include "res/pioche.c"
 
 #include "sounds/Jump.h"
@@ -811,7 +818,7 @@ void initWorld()
 
         for (int wY = 0; wY < WORLD_HEIGHT; wY++)
         {
-            if (wY > (rowGround + 5))
+            if (wY > (rowGround + 3))
             {
                 WORLD[wY][wX].id = BLOCK_ROCK;
                 WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
@@ -973,19 +980,87 @@ void initWorld()
                 //Et celle du dessus par de l'herbe
                 if (wY - 1 >= 0)
                 {
+/*                    if (rand()%100 < 5)
+                    {
+                        WORLD[wY - 1][wX].id = BLOCK_TREE1 + rand()%3;
+                        WORLD[wY - 1][wX].attr.life = BLOCK_LIFE_NA;
+                        WORLD[wY - 1][wX].attr.traversable = 1;
+                        WORLD[wY - 1][wX].attr.opaque = 0;
+                    }*/
                     //12 pourcent de chance de mettre de l'herbe
                     if (rand()%100 < 12)
                     {
                         WORLD[wY - 1][wX].id = BLOCK_GRASS1 + rand()%3;
                         WORLD[wY - 1][wX].attr.life = BLOCK_LIFE_NA;
                         WORLD[wY - 1][wX].attr.traversable = 1;
-                        WORLD[wY - 1][wX].attr.opaque = 0;
+                        WORLD[wY - 1][wX].attr.opaque = 1;
                     }
                 }
 
                 break;
             }
         }
+    }
+
+    //VEGETATION
+    int nbTries = 0;
+    for (int nbTrees = 0; nbTrees < MAX_TREES; nbTries < 50)
+    {
+        int hauteur;
+        int posX;
+        TworldTile tile = {0};
+        TworldTile tileGG = {0};
+        TworldTile tileDD = {0};
+        TworldTile tile1 = {0};
+        TworldTile tile2 = {0};
+        TworldTile tileG = {0};
+        TworldTile tileG1 = {0};
+        TworldTile tileG2 = {0};
+        TworldTile tileD = {0};
+        TworldTile tileD1 = {0};
+        TworldTile tileD2 = {0};
+        posX = random(3, WORLD_WIDTH - 3);
+        bool bFound = true;
+        int nbSearch = 0;
+        do
+        {
+            hauteur = WORLD[HEADER_ROW][posX].id;
+            if (hauteur > 2)
+            {
+                tile = getWorldAt(posX, hauteur - 1);
+                tile1 = getWorldAt(posX, hauteur - 2);
+                tile2 = getWorldAt(posX, hauteur - 3);
+                tileG = getWorldAt(posX - 1, hauteur - 1);
+                tileG1 = getWorldAt(posX - 1, hauteur - 2);
+                tileG2 = getWorldAt(posX - 1, hauteur - 3);
+                tileD = getWorldAt(posX + 1, hauteur - 1);
+                tileD1 = getWorldAt(posX + 1, hauteur - 2);
+                tileD2 = getWorldAt(posX + 1, hauteur - 3);
+
+                tileGG = getWorldAt(posX - 2, hauteur - 1);
+                tileDD = getWorldAt(posX + 2, hauteur - 1);
+            }
+            nbSearch++;
+            
+        }  while ( !tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
+                !tile1.attr.traversable && !tileG1.attr.traversable && !tileD1.attr.traversable &&
+                !tile2.attr.traversable && !tileG2.attr.traversable && !tileD2.attr.traversable &&
+                !tileGG.attr.traversable && !tileDD.attr.traversable && nbSearch < 50);
+
+        if (bFound)
+        {
+            WORLD[hauteur - 1][posX].id = BLOCK_TREE1 + rand()%3;
+            WORLD[hauteur - 1][posX].attr.life = BLOCK_LIFE_1;
+            WORLD[hauteur - 1][posX].attr.traversable = 1;
+            WORLD[hauteur - 1][posX].attr.opaque = 1;
+            nbTrees++;
+        }
+        else
+        {
+            //Echec, on retente 50 fois pas plus
+            nbTries++;
+        }
+        
     }
 
     NB_WORLD_ENNEMIES = 0;
@@ -1133,7 +1208,8 @@ void initWorld()
     {
         int curP = WORLD[REF_ROW][4+nbW].id;
         WORLD[(curP-1)][4+nbW].attr.Level = MAX_WATER_LEVEL;
-        WORLD[(curP-2)][4+nbW].attr.Level = MAX_WATER_LEVEL/2;
+        WORLD[(curP-3)][4+nbW].attr.Level = MAX_WATER_LEVEL/2;
+        WORLD[(curP-5)][4+nbW].attr.Level = 1;
     }
     
 
@@ -1519,7 +1595,11 @@ void drawTiles()
                     {
                         if (brick->attr.Level > 0)
                         {
-                            drawWaterTile(px, py, NULL, curLight, brick->attr.Level, brick->attr.Direction);
+                            bool bOnSurface = false;
+                            if (wY > 0)
+                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+
+                            drawWaterTile(px, py, NULL, curLight, brick->attr.Level, bOnSurface);
                         }
                         //rien le fond
                     }
@@ -1529,7 +1609,11 @@ void drawTiles()
                         
                         if (brick->attr.Level > 0)
                         {
-                            drawWaterTile(px, py, back_ground.pixel_data, curLight, brick->attr.Level, brick->attr.Direction);
+                            bool bOnSurface = false;
+                            if (wY > 0)
+                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+
+                            drawWaterTile(px, py, back_ground.pixel_data, curLight, brick->attr.Level, bOnSurface);
                         }
                         else
                             drawTile(px, py, back_ground.pixel_data, curLight);
@@ -1545,15 +1629,54 @@ void drawTiles()
                     }
                     else if (value == BLOCK_GRASS1) //
                     {
-                        drawTile(px, py, grass1.pixel_data, curLight);
+                        if (brick->attr.Level > 0)
+                        {
+                            bool bOnSurface = false;
+                            if (wY > 0)
+                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+
+                            drawWaterTile(px, py, grass1.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                        }
+                        else
+                            drawTile(px, py, grass1.pixel_data, curLight);
                     }
                     else if (value == BLOCK_GRASS2) //
                     {
-                        drawTile(px, py, grass2.pixel_data, curLight);
+                        if (brick->attr.Level > 0)
+                        {
+                            bool bOnSurface = false;
+                            if (wY > 0)
+                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+
+                            drawWaterTile(px, py, grass2.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                        }
+                        else
+                            drawTile(px, py, grass2.pixel_data, curLight);
                     }
                     else if (value == BLOCK_GRASS3) //
                     {
-                        drawTile(px, py, grass3.pixel_data, curLight);
+                        if (brick->attr.Level > 0)
+                        {
+                            bool bOnSurface = false;
+                            if (wY > 0)
+                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+
+                            drawWaterTile(px, py, grass3.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                        }
+                        else
+                            drawTile(px, py, grass3.pixel_data, curLight);
+                    }
+                    else if (value == BLOCK_TREE1) //
+                    {
+                        drawTreeTile(px, py, tree1.pixel_data, tree1.width, tree1.height, curLight);
+                    }
+                    else if (value == BLOCK_TREE2) //
+                    {
+                        drawTreeTile(px, py, tree2.pixel_data, tree2.width, tree2.height, curLight);
+                    }
+                    else if (value == BLOCK_TREE3) //
+                    {
+                        drawTreeTile(px, py, tree3.pixel_data, tree3.width, tree3.height, curLight);
                     }
                     else if (value == BLOCK_ROCK) //
                     {
@@ -1632,6 +1755,81 @@ void drawTiles()
     }
 
     briquesFRAMES++;
+}
+
+
+void drawTilesBlob()
+{
+    int playerLightStartX = Player.pos.worldX - (PLAYER_LIGHT_MASK_WIDTH / 2);
+    int playerLightStartY = Player.pos.worldY - (PLAYER_LIGHT_MASK_HEIGHT / 2);
+    int playerLightEndX = playerLightStartX + (PLAYER_LIGHT_MASK_WIDTH - 1);
+    int playerLightEndY = playerLightStartY + (PLAYER_LIGHT_MASK_HEIGHT - 1);
+
+    for (int wX = worldMIN_X-1; wX < worldMAX_X+1; wX++)
+    {
+        if (wX < 0 || wX >= WORLD_WIDTH)
+            continue;
+
+        int profondeurColonne = WORLD[HEADER_ROW][wX].id;
+
+        int px = ((wX - worldMIN_X) * 16) - currentOffset_X;
+        if ((px < ARCADA_TFT_WIDTH + 16) && (px > -16))
+        {
+            for (int wY = worldMIN_Y-1; wY < worldMAX_Y+1; wY++)
+            {
+                if (wY < 0 || wY >= WORLD_HEIGHT)
+                    continue;
+
+                int py = ((wY - worldMIN_Y) * 16) - currentOffset_Y;
+                if ((py < ARCADA_TFT_HEIGHT + 16) && (py > -16))
+                {
+                    TworldTile *brick = &WORLD[wY][wX];
+                    uint8_t value = brick->id;
+
+                    int curLight = MAX_LIGHT_INTENSITY;
+                    // @todo gerer la nuit (dans ce cas pas de max light et ground.. ou la lune ?)
+                    if (brick->attr.opaque)// || wY > profondeurColonne)
+                    {
+                        if (profondeurColonne != 0)
+                        {
+                            int delta = (wY - profondeurColonne) + 1;
+                            if (delta > 1)
+                                curLight = curLight / delta;
+                        }
+
+                        //if (wY <= (Player.pos.worldY + 2))
+                        {
+                            if (wX >= playerLightStartX && wX <= playerLightEndX && wY >= playerLightStartY && wY <= playerLightEndY)
+                            {
+                                //Raycast
+                                if (checkCollisionTo(Player.pos.worldX, Player.pos.worldY, wX, wY))
+                                    curLight = curLight + playerLightMask[wY - playerLightStartY][wX - playerLightStartX];
+                            }
+                        }
+                        //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
+                        curLight = min(curLight, MAX_LIGHT_INTENSITY);
+                    }
+#ifdef DEBUG
+                    curLight = MAX_LIGHT_INTENSITY;
+#endif
+
+                    if (value == BLOCK_TREE1) //
+                    {
+                        drawTreeTile(px, py, tree1.pixel_data, tree1.width, tree1.height, curLight);
+                    }
+                    else if (value == BLOCK_TREE2) //
+                    {
+                        drawTreeTile(px, py, tree2.pixel_data, tree2.width, tree2.height, curLight);
+                    }
+                    else if (value == BLOCK_TREE3) //
+                    {
+                        drawTreeTile(px, py, tree3.pixel_data, tree3.width, tree3.height, curLight);
+                    }
+                    
+                }
+            }
+        }
+    }
 }
 
 void drawParticles()
@@ -1773,6 +1971,9 @@ void drawHud()
 void drawWorld()
 {
     drawTiles();
+    drawTilesBlob();
+    briquesFRAMES++;
+
 
     drawEnnemies();
 
@@ -2613,9 +2814,46 @@ void updateWorld()
     //gestion de l'eau...
     if (everyXFrames(2))
     {
-        uint32_t now = micros();
+//        uint32_t now = micros();
         WATER_Update();
-        Serial.printf("WatUpd:%d\n", micros() - now);
+//        Serial.printf("WatUpd:%d\n", micros() - now);
+    }
+    else
+    {
+        //Update alternatif (lava ? anims ?)
+        FoliageUpdate();
+    }
+    
+}
+
+void FoliageUpdate()
+{
+    for (int wX = 0; wX < WORLD_WIDTH; wX++)
+    {
+        int hauteur = WORLD[HEADER_ROW][wX].id;
+        TworldTile tile = getWorldAt(wX, hauteur);
+        TworldTile tileUp = getWorldAt(wX, hauteur - 1);
+        int randSeed = random(0,1000);
+
+        //on transforme les ground en ground top si ils sont en surface
+        if (tile.id == BLOCK_GROUND && tileUp.attr.Level == 0 && randSeed < 25)
+        {
+            tile.id = BLOCK_GROUND_TOP;
+            setWorldAt(wX, hauteur, tile);
+        }
+        //Si groundtop sous l'eau on le met en ground
+        if (tile.id == BLOCK_GROUND_TOP && tileUp.attr.Level > 2 && randSeed < 33)
+        {
+            tile.id = BLOCK_GROUND;
+            setWorldAt(wX, hauteur, tile);
+            //On enleve l'herbe d'au dessus si besoin, on laisse les arbes ??
+            if (tileUp.id == BLOCK_GRASS1 || tileUp.id == BLOCK_GRASS2 || tileUp.id == BLOCK_GRASS3)
+            {
+                tileUp.id = BLOCK_AIR;
+                setWorldAt(wX, hauteur-1, tileUp);
+            }
+        }
+//        if (tileUp.id == BLOCK_TREE1 &&)
     }
 }
 
@@ -3203,45 +3441,18 @@ bool LoadGame(uint8_t numEmplacement)
 
         data.seek(0);
 
-        data.read(); // [
         for (int wY = 0; wY < WORLD_HEIGHT + 2; wY++)
         {
             for (int wX = 0; wX < WORLD_WIDTH; wX++)
             {
-                char buff[5];
-                buff[0] = data.read();
-                buff[1] = data.read();
-                buff[2] = data.read();
-                buff[3] = 0;
-                data.read(); // ,
-                int value = strtol(buff, 0, 10);
-                WORLD[wY][wX].id = (uint8_t)value;
+                uint8_t value = data.read();
+                WORLD[wY][wX].id = value;
+
+                uint16_t value16 = (data.read() << 8) | data.read();
+                WORLD[wY][wX].attr.RAW = value16;
             }
         }
-        data.read(); //  ]
-
-        data.read(); // ,
-        //read world infos
-        data.read(); // [
-        for (int wY = 0; wY < WORLD_HEIGHT + 2; wY++)
-        {
-            for (int wX = 0; wX < WORLD_WIDTH; wX++)
-            {
-                char buff[8];
-                buff[0] = data.read();
-                buff[1] = data.read();
-                buff[2] = data.read();
-                buff[3] = data.read();
-                buff[4] = data.read();
-                buff[5] = 0;
-                data.read(); // ,
-                int value = strtol(buff, 0, 10);
-                WORLD[wY][wX].attr.RAW = (uint16_t)value;
-            }
-        }
-        data.read(); //  ]
-
-        //data.read();
+        
         data.close();
 
         ret = true;
@@ -3263,41 +3474,19 @@ bool SaveGame(uint8_t numEmplacement)
     //read world
     if (data)
     {
-        data.write('[');
         for (int wY = 0; wY < WORLD_HEIGHT + 2; wY++)
         {
             for (int wX = 0; wX < WORLD_WIDTH; wX++)
             {
                 uint8_t value = WORLD[wY][wX].id;
-                char buff[5];
-                sprintf(buff, "%03d,", value);
-                data.write(buff[0]);
-                data.write(buff[1]);
-                data.write(buff[2]);
-                data.write(buff[3]);
+                data.write(value);
+                uint16_t value16 = WORLD[wY][wX].attr.RAW;
+                value = (value16 & 0xFF00) >> 8;
+                data.write(value);
+                value = (value16 & 0x00FF);
+                data.write(value);
             }
         }
-        data.write(']');
-        data.write(',');
-        //write world infos
-        data.write('[');
-        for (int wY = 0; wY < WORLD_HEIGHT + 2; wY++)
-        {
-            for (int wX = 0; wX < WORLD_WIDTH; wX++)
-            {
-                uint16_t value = WORLD[wY][wX].attr.RAW;
-                char buff[8];
-                sprintf(buff, "%05d,", value);
-                data.write(buff[0]);
-                data.write(buff[1]);
-                data.write(buff[2]);
-                data.write(buff[3]);
-                data.write(buff[4]);
-                data.write(buff[5]);
-            }
-        }
-        data.write(']');
-
         data.flush();
         data.close();
 
@@ -3697,7 +3886,10 @@ void anim_player_fx_double_jump()
 void displayGame()
 {
     // digital clock display of the time
-    canvas->fillScreen(0x867D); //84ceef
+    //canvas->fillScreen(0x867D); //84ceef
+    //deltaX
+    //uint16_t offsetBackX = ((worldMIN_X / WORLD_WIDTH)*16 - currentOffset_X) * background_day.width;
+    drawBackgroundImage(0, 0, background_day.width, background_day.height, background_day.pixel_data);
 
     drawWorld();
 

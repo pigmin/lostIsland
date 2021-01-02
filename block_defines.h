@@ -5,6 +5,10 @@
 #define BLOCK_GRASS2            4
 #define BLOCK_GRASS3            5
 
+#define BLOCK_TREE1             6
+#define BLOCK_TREE2             7
+#define BLOCK_TREE3             8
+
 #define BLOCK_UNDERGROUND_AIR   0x7F
 
 #define BLOCK_ROCK              0x10    //

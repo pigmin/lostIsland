@@ -92,7 +92,7 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-              canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
+            canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
           }
         }
         //    Serial.println("");
@@ -108,7 +108,7 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
           //        Serial.printf("%0,", value);
           if (value != 0xF81F)
           {
-              canvas->drawPixel((xMove + width - 1) - i, yMove, lightBlendRGB565(value, light));
+            canvas->drawPixel((xMove + width - 1) - i, yMove, lightBlendRGB565(value, light));
           }
         }
         //    Serial.println("");
@@ -119,38 +119,75 @@ void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, con
   //  Serial.println("");
 }
 
-void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light, uint8_t waterLevel, uint8_t Direction)
+void drawImage(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap)
+{
+  uint16_t idx = 0;
+
+  for (int16_t j = 0; j < height; j++, yMove++)
+  {
+    idx = (width * j) << 1;
+    for (int16_t i = 0; i < width; i++)
+    {
+      uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
+      canvas->drawPixel(xMove + i, yMove, value);
+    }
+  }
+}
+
+
+void drawBackgroundImage(int16_t srcx, int16_t srcy, int16_t srcw, int16_t srch, const unsigned char *bitmap)
+{
+  uint16_t idx = 0;
+
+  uint16_t x = min(srcx, srcw - ARCADA_TFT_WIDTH);
+  uint16_t y = min(srcy, srch - ARCADA_TFT_HEIGHT);
+
+  uint16_t width = min(srcw - x, ARCADA_TFT_WIDTH);
+  uint16_t height = min(srch - y, ARCADA_TFT_HEIGHT);
+  
+  for (int16_t j = 0; j < height; j++, y++)
+  {
+    idx = ((srcw * y)  + x) << 1;
+    for (int16_t i = 0; i < width; i++)
+    {
+      uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
+      canvas->drawPixel(i, j, value);
+    }
+  }
+}
+
+void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light, uint8_t waterLevel, bool bOnSurface)
 {
   uint16_t waterColor = 0;
   uint8_t valAlpha = 0;
   switch (waterLevel)
   {
   case 7:
-    waterColor = RGBConvert(0,56,114);
+    waterColor = RGBConvert(0, 56, 114);
     valAlpha = ALPHA_25;
     break;
   case 6:
-    waterColor = RGBConvert(0,105,212);
+    waterColor = RGBConvert(0, 105, 212);
     valAlpha = ALPHA_37;
     break;
   case 5:
-    waterColor = RGBConvert(6,130,255);
+    waterColor = RGBConvert(6, 130, 255);
     valAlpha = ALPHA_50;
     break;
   case 4:
-    waterColor = RGBConvert(55,154,255);
+    waterColor = RGBConvert(55, 154, 255);
     valAlpha = ALPHA_60;
     break;
   case 3:
-    waterColor = RGBConvert(104,179,255);
+    waterColor = RGBConvert(104, 179, 255);
     valAlpha = ALPHA_66;
     break;
   case 2:
-    waterColor = RGBConvert(153,203,255);
+    waterColor = RGBConvert(153, 203, 255);
     valAlpha = ALPHA_75;
     break;
   case 1:
-    waterColor = RGBConvert(201,228,254);
+    waterColor = RGBConvert(201, 228, 254);
     valAlpha = ALPHA_75;
     break;
 
@@ -172,11 +209,15 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            canvas->drawPixel(xMove + i, yMove, alphaBlendRGB565(value, waterColor, valAlpha));
+            if ((bOnSurface && j > 8) || (!bOnSurface))
+              value = alphaBlendRGB565(value, waterColor, valAlpha);
+            canvas->drawPixel(xMove + i, yMove, value);
           }
         }
         //    Serial.println("");
       }
+      if (bOnSurface)
+        canvas->drawFastHLine(xMove, yMove + 8, 16, ARCADA_WHITE);
     }
     else if (light == 0)
     {
@@ -203,21 +244,30 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            //color blend            
-            value = alphaBlendRGB565(value, waterColor, valAlpha);
+            //color blend
+            if ((bOnSurface && j > 8) || (!bOnSurface))
+              value = alphaBlendRGB565(value, waterColor, valAlpha);
             //light blend
             value = lightBlendRGB565(value, light);
             canvas->drawPixel(xMove + i, yMove, value);
           }
         }
       }
+      if (bOnSurface)
+        canvas->drawFastHLine(xMove, yMove + 8, 16, lightBlendRGB565(ARCADA_WHITE, light));
     }
   }
   else
   {
     if (light < 0 || light == MAX_LIGHT_INTENSITY)
     {
-      canvas->fillRect(xMove, yMove, 16, 16, waterColor);
+      if (bOnSurface)
+      {
+        canvas->fillRect(xMove, yMove + 9, 16, 8, waterColor);
+        canvas->drawFastHLine(xMove, yMove + 8, 16, ARCADA_WHITE);
+      }
+      else
+        canvas->fillRect(xMove, yMove, 16, 16, waterColor);
     }
     else if (light == 0)
     {
@@ -225,7 +275,13 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
     }
     else
     {
-      canvas->fillRect(xMove, yMove, 16, 16, lightBlendRGB565(waterColor, light));
+      if (bOnSurface)
+      {
+        canvas->fillRect(xMove, yMove + 8, 16, 8, lightBlendRGB565(waterColor, light));
+        canvas->drawFastHLine(xMove, yMove + 8, 16, lightBlendRGB565(ARCADA_WHITE, light));
+      }
+      else
+        canvas->fillRect(xMove, yMove, 16, 16, lightBlendRGB565(waterColor, light));
     }
   }
 }
@@ -279,7 +335,7 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-              canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
+            canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
           }
         }
       }
@@ -289,6 +345,66 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
   //  Serial.println("");
 }
 
+void drawTreeTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int16_t width, int16_t height, int light)
+{
+  uint16_t idx = 0;
+
+  xMove = xMove - ((width - 16) >> 1);
+  yMove = yMove - (height - 16);
+
+  if (light < 0 || light == MAX_LIGHT_INTENSITY)
+  {
+    for (int16_t j = 0; j < height; j++, yMove++)
+    {
+      for (int16_t i = 0; i < width; i++)
+      {
+        uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
+        //   Serial.printf("%d,", value);
+        if (value != 0xF81F)
+        {
+          canvas->drawPixel(xMove + i, yMove, value);
+        }
+      }
+      //    Serial.println("");
+    }
+  }
+  else
+  {
+    if (light == 0)
+    {
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
+          //   Serial.printf("%d,", value);
+          if (value != 0xF81F)
+          {
+            canvas->drawPixel(xMove + i, yMove, ARCADA_BLACK);
+          }
+        }
+      }
+    }
+    else
+    {
+
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint16_t value = (bitmap[idx++]) + (bitmap[idx++] << 8);
+          //   Serial.printf("%d,", value);
+          if (value != 0xF81F)
+          {
+            canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
+          }
+        }
+      }
+    }
+  }
+
+  //  Serial.println("");
+}
 // Fast RGB565 pixel blending
 // Found in a pull request for the Adafruit framebuffer library. Clever!
 // https://github.com/tricorderproject/arducordermini/pull/1/files#diff-d22a481ade4dbb4e41acc4d7c77f683d
