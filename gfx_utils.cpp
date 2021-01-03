@@ -2,6 +2,7 @@
 #include <Adafruit_GFX.h>
 
 #include "gfx_utils.h"
+#include "WaterSim.h"
 
 extern GFXcanvas16 *canvas;
 
@@ -160,6 +161,11 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
 {
   uint16_t waterColor = 0;
   uint8_t valAlpha = 0;
+  uint8_t waterStart;
+  uint8_t waterWidth;
+
+  uint8_t origY = yMove;
+
   switch (waterLevel)
   {
   case 7:
@@ -194,6 +200,19 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
   default:
     return;
   }
+
+  if (bOnSurface)
+  {
+    waterWidth = waterLevel + 2;
+    waterStart = 16 - waterWidth;
+  }
+  else
+  {
+    waterWidth = 16;
+    waterStart = 0;
+  }
+  
+  
   if (bitmap)
   {
     uint16_t idx = 0;
@@ -209,7 +228,7 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
           //   Serial.printf("%d,", value);
           if (value != 0xF81F)
           {
-            if ((bOnSurface && j > 8) || (!bOnSurface))
+            if (j >= waterStart)
               value = alphaBlendRGB565(value, waterColor, valAlpha);
             canvas->drawPixel(xMove + i, yMove, value);
           }
@@ -217,7 +236,7 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
         //    Serial.println("");
       }
       if (bOnSurface)
-        canvas->drawFastHLine(xMove, yMove + 8, 16, ARCADA_WHITE);
+        canvas->drawFastHLine(xMove, origY + waterStart, 16, ARCADA_WHITE);
     }
     else if (light == 0)
     {
@@ -245,7 +264,7 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
           if (value != 0xF81F)
           {
             //color blend
-            if ((bOnSurface && j > 8) || (!bOnSurface))
+            if (j >= waterStart)
               value = alphaBlendRGB565(value, waterColor, valAlpha);
             //light blend
             value = lightBlendRGB565(value, light);
@@ -254,20 +273,27 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
         }
       }
       if (bOnSurface)
-        canvas->drawFastHLine(xMove, yMove + 8, 16, lightBlendRGB565(ARCADA_WHITE, light));
+        canvas->drawFastHLine(xMove, origY + waterStart, 16, lightBlendRGB565(ARCADA_WHITE, light));
     }
   }
   else
   {
     if (light < 0 || light == MAX_LIGHT_INTENSITY)
     {
-      if (bOnSurface)
+      yMove+=waterStart;
+      for (int16_t j = waterStart; j < 16; j++, yMove++)
       {
-        canvas->fillRect(xMove, yMove + 9, 16, 8, waterColor);
-        canvas->drawFastHLine(xMove, yMove + 8, 16, ARCADA_WHITE);
+        for (int16_t i = 0; i < 16; i++)
+        {
+          uint16_t value = canvas->getPixel(xMove + i, yMove);
+          //   Serial.printf("%d,", value);
+          value = alphaBlendRGB565(value, waterColor, valAlpha);
+          canvas->drawPixel(xMove + i, yMove, value);
+        }
+        //    Serial.println("");
       }
-      else
-        canvas->fillRect(xMove, yMove, 16, 16, waterColor);
+      if (bOnSurface)
+        canvas->drawFastHLine(xMove, origY + waterStart, 16, ARCADA_WHITE);
     }
     else if (light == 0)
     {
@@ -275,13 +301,25 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
     }
     else
     {
-      if (bOnSurface)
+      yMove+=waterStart;
+      for (int16_t j = waterStart; j < 16; j++, yMove++)
       {
-        canvas->fillRect(xMove, yMove + 8, 16, 8, lightBlendRGB565(waterColor, light));
-        canvas->drawFastHLine(xMove, yMove + 8, 16, lightBlendRGB565(ARCADA_WHITE, light));
+        for (int16_t i = 0; i < 16; i++)
+        {
+          uint16_t value = canvas->getPixel(xMove + i, yMove);
+          //   Serial.printf("%d,", value);
+          if (value != 0xF81F)
+          {
+            //color blend
+            value = alphaBlendRGB565(value, waterColor, valAlpha);
+            //light blend
+            value = lightBlendRGB565(value, light);
+            canvas->drawPixel(xMove + i, yMove, value);
+          }
+        }
       }
-      else
-        canvas->fillRect(xMove, yMove, 16, 16, lightBlendRGB565(waterColor, light));
+      if (bOnSurface)
+        canvas->drawFastHLine(xMove, origY + waterStart, 16, lightBlendRGB565(ARCADA_WHITE, light));
     }
   }
 }

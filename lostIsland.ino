@@ -78,21 +78,21 @@ static const uint32_t PROGMEM pmf_aceman[] =
 #include "res/skel_walk2.c"
 #include "res/skel_walk3.c"
 
-#include "res2/back_ground.c"
+#include "res/back_ground.c"
 
-#include "res2/ground_top.c"
-#include "res2/ground.c"
+#include "res/ground_top.c"
+#include "res/ground.c"
 #include "res/grass1.c"
 #include "res/grass2.c"
 #include "res/grass3.c"
-#include "res2/rock_diamant.c"
-#include "res2/rock_charbon.c"
-#include "res2/rock_cuivre.c"
-#include "res2/rock_empty.c"
-#include "res2/rock_fer.c"
-#include "res2/rock_jade.c"
-#include "res2/rock_or.c"
-#include "res2/rock_redstone.c"
+#include "res/rock_diamant.c"
+#include "res/rock_charbon.c"
+#include "res/rock_cuivre.c"
+#include "res/rock_empty.c"
+#include "res/rock_fer.c"
+#include "res/rock_jade.c"
+#include "res/rock_or.c"
+#include "res/rock_redstone.c"
 
 #include "res/diamant_small.c"
 #include "res/charbon_small.c"
@@ -103,12 +103,12 @@ static const uint32_t PROGMEM pmf_aceman[] =
 #include "res/or_small.c"
 #include "res/redstone_small.c"
 
-#include "res2/tree1.c"
-#include "res2/tree2.c"
-#include "res2/tree3.c"
+#include "res/tree1.c"
+#include "res/tree2.c"
+#include "res/tree3.c"
 
 
-#include "res2/background_day.c"
+#include "res/background_day.c"
 
 #include "res/pioche.c"
 
@@ -231,6 +231,8 @@ void updateGame();
 
 void displayGame();
 void initWorld();
+void postInitWorld();
+
 
 void anim_player_jump();
 void anim_player_dying();
@@ -260,6 +262,8 @@ TworldTile brique_PLAYER = {0};
 
 int count_player_die = 0;
 int count_player_win = 0;
+
+int16_t hauteurMaxBackground = 0;
 
 unsigned long prevDisplay = 0; // when the digital clock was displayed
 
@@ -628,6 +632,7 @@ void initGame()
     count_player_win = 0;
 
     initWorld();
+    postInitWorld();
     initPlayer();
 }
 
@@ -770,6 +775,31 @@ void set_wining()
         Player.anim_frame = PLAYER_FRAME_WIN_1;
         Player.current_framerate = 0;
     }
+}
+
+void postInitWorld()
+{
+    //Update necessaires au jeu apres init ou load
+//....recalcul hauteur, etc..
+    int wY = WORLD_HEIGHT-1;
+    hauteurMaxBackground = 0;
+    do
+    {
+        for (int wX = 0; wX < WORLD_WIDTH; wX++)
+        {
+            if (WORLD[wY][wX].id == BLOCK_AIR)
+            {
+                hauteurMaxBackground = wY + 1;
+                break;
+            }
+        }
+        wY--;
+    } while (wY > 0 && hauteurMaxBackground == 0);
+    Serial.printf("hauteurMaxBackground:%d\n", hauteurMaxBackground);
+
+    //Musique
+    StopMOD();
+    PlayMOD(pmf_ninja);
 }
 
 void initWorld()
@@ -1002,6 +1032,19 @@ void initWorld()
         }
     }
 
+    //TEST WATER    
+    for (int nbW = 0; nbW < WORLD_WIDTH-4; nbW++)
+    {
+        int curP = WORLD[REF_ROW][4+nbW].id;
+        WORLD[(curP-1)][4+nbW].attr.Level = MAX_WATER_LEVEL;
+        WORLD[(curP-3)][4+nbW].attr.Level = MAX_WATER_LEVEL/2;
+        WORLD[(curP-5)][4+nbW].attr.Level = 1;
+    }
+
+    //On update en boucle de force pour stabiliser l'eau
+    for (int nbWaterUp = 0; nbWaterUp < 500; nbWaterUp++)
+        WATER_Update();
+    
     //VEGETATION
     int nbTries = 0;
     for (int nbTrees = 0; nbTrees < MAX_TREES; nbTries < 50)
@@ -1045,6 +1088,7 @@ void initWorld()
         }  while ( !tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
                 !tile1.attr.traversable && !tileG1.attr.traversable && !tileD1.attr.traversable &&
                 !tile2.attr.traversable && !tileG2.attr.traversable && !tileD2.attr.traversable &&
+                !tile.attr.Level == 0 && !tileG.attr.Level == 0 && !tileD.attr.Level == 0 &&
                 !tileGG.attr.traversable && !tileDD.attr.traversable && nbSearch < 50);
 
         if (bFound)
@@ -1080,7 +1124,8 @@ void initWorld()
             tileG = getWorldAt(posX - 1, hauteur - 1);
             tileD = getWorldAt(posX + 1, hauteur - 1);
             // @todo tester que le zombi est pas deja sur un autre ennemi (un marqueur sur la tile ? )
-        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable);
+        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
+                !tile.attr.Level && !tileG.attr.Level && !tileD.attr.Level);
 
         //Skel
         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
@@ -1122,7 +1167,8 @@ void initWorld()
             tileG = getWorldAt(posX - 1, hauteur - 1);
             tileD = getWorldAt(posX + 1, hauteur - 1);
             // @todo tester que le zombi est pas deja sur un autre ennemi (un marqueur sur la tile ? )
-        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable);
+        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
+                !tile.attr.Level && !tileG.attr.Level && !tileD.attr.Level);
 
         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
         ENNEMIES[NB_WORLD_ENNEMIES].worldX = posX;
@@ -1147,9 +1193,8 @@ void initWorld()
         NB_WORLD_ENNEMIES++;
         NB_WORLD_ZOMBIES++;
     }
+    
     //Spiders
-    // @todo
-
     for (int wX = BASE_X_PLAYER + 5; wX < WORLD_WIDTH - 1; wX += 3)
     {
         int hauteur = WORLD[HEADER_ROW][wX].id;
@@ -1161,7 +1206,7 @@ void initWorld()
             {
                 if (seed <= 60)
                 {
-                    if (WORLD[wY][wX].attr.traversable && WORLD[wY][wX + 1].attr.traversable && WORLD[wY][wX - 1].attr.traversable && WORLD[wY - 1][wX].attr.traversable)
+                    if (WORLD[wY][wX].attr.traversable && WORLD[wY][wX].attr.Level==0  && WORLD[wY][wX + 1].attr.traversable && WORLD[wY][wX - 1].attr.traversable && WORLD[wY - 1][wX].attr.traversable)
                     {
                         //Spiders
                         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
@@ -1201,17 +1246,6 @@ void initWorld()
 
     NB_WORLD_ITEMS = 0;
     CURRENT_QUEUE_ITEMS = 0;
-
-    //TEST WATER
-    
-    for (int nbW = 0; nbW < WORLD_WIDTH-4; nbW++)
-    {
-        int curP = WORLD[REF_ROW][4+nbW].id;
-        WORLD[(curP-1)][4+nbW].attr.Level = MAX_WATER_LEVEL;
-        WORLD[(curP-3)][4+nbW].attr.Level = MAX_WATER_LEVEL/2;
-        WORLD[(curP-5)][4+nbW].attr.Level = 1;
-    }
-    
 
     StopMOD();
     PlayMOD(pmf_ninja);
@@ -1970,6 +2004,10 @@ void drawHud()
 
 void drawWorld()
 {
+    //On dessine le background uniquement si on peut le voir, en sous sol on l'ignore, les tiles "background air" etant sans transparence
+    if (worldMIN_Y < hauteurMaxBackground)
+        drawBackgroundImage(0, 0, background_day.width, background_day.height, background_day.pixel_data);
+
     drawTiles();
     drawTilesBlob();
     briquesFRAMES++;
@@ -3457,6 +3495,9 @@ bool LoadGame(uint8_t numEmplacement)
 
         ret = true;
     }
+    //
+    postInitWorld();
+
     return ret;
 }
 
@@ -3885,12 +3926,8 @@ void anim_player_fx_double_jump()
 
 void displayGame()
 {
-    // digital clock display of the time
     //canvas->fillScreen(0x867D); //84ceef
-    //deltaX
-    //uint16_t offsetBackX = ((worldMIN_X / WORLD_WIDTH)*16 - currentOffset_X) * background_day.width;
-    drawBackgroundImage(0, 0, background_day.width, background_day.height, background_day.pixel_data);
-
+    
     drawWorld();
 
     //arcada.display->display();

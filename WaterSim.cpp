@@ -126,6 +126,10 @@ void FlowRight(TworldTile *cell, TworldTile *rightCell)
     rightCell->attr.Level = amountToSpread + remainder;
     rightCell->attr.Direction = Direction_Right;
     cell->attr.Level = amountToSpread;
+    if (cell->attr.Direction == Direction_Bottom)
+        cell->attr.Direction = Direction_Bottom_Right;
+    else
+        cell->attr.Direction = Direction_Right;
 }
 
 void FlowLeft(TworldTile *cell, TworldTile *leftCell)
@@ -136,6 +140,10 @@ void FlowLeft(TworldTile *cell, TworldTile *leftCell)
     leftCell->attr.Level = amountToSpread + remainder;
     leftCell->attr.Direction = Direction_Left;
     cell->attr.Level = amountToSpread;
+    if (cell->attr.Direction == Direction_Bottom)
+        cell->attr.Direction = Direction_Bottom_Left;
+    else
+        cell->attr.Direction = Direction_Left;
 }
 
 void FlowLeftRight(TworldTile *cell, TworldTile *leftCell, TworldTile *rightCell)
@@ -184,6 +192,8 @@ int FlowBottom(TworldTile *cell, TworldTile *bottomCell)
     bottomCell->attr.Level += amountToMove;
     bottomCell->attr.Direction = Direction_None;
     cell->attr.Level -= amountToMove;
+    if (cell->attr.Level > 0)
+        cell->attr.Direction = Direction_Bottom;
 
     return cell->attr.Level;
 }
