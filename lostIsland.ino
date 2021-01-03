@@ -4,24 +4,15 @@
 #include <Adafruit_SPIFlash.h>
 #include <Adafruit_ZeroTimer.h>
 
-#include "defines.h"
-
-
-#include "types.h"
-#include "items.h"
-#include "ennemies.h"
-#include "sprites.h"
-#include "block_defines.h"
-
 #include "gfx_utils.h"
-
 #include "Particle.h"
-
 #include "MySoundManager.h"
+#include "pmf_player.h"
 
 #include "SimplexNoise.h"
-
 #include "WaterSim.h"
+
+#include "lostIsland.h"
 
 static const uint32_t PROGMEM pmf_ninja[] =
     {
@@ -33,92 +24,13 @@ static const uint32_t PROGMEM pmf_aceman[] =
 #include "musics/aceman.h"
 };
 
+#include "ressources.h"
+
 #if !defined(USE_TINYUSB)
 #error("Please select TinyUSB for the USB stack!")
 #endif
 
-#include "res/player_idle1.c"
-#include "res/player_idle2.c"
-#include "res/player_idle3.c"
 
-#include "res/player_walk1.c"
-#include "res/player_walk2.c"
-#include "res/player_walk3.c"
-#include "res/player_walk4.c"
-#include "res/player_walk5.c"
-#include "res/player_walk6.c"
-
-#include "res/player_action1.c"
-#include "res/player_action2.c"
-#include "res/player_action3.c"
-#include "res/player_action4.c"
-
-#include "res/player_falling1.c"
-
-#include "res/player_jump1.c"
-#include "res/player_jump2.c"
-#include "res/player_jump3.c"
-#include "res/player_jump4.c"
-#include "res/player_jump5.c"
-
-#include "res/fx_jump1.c"
-#include "res/fx_jump2.c"
-#include "res/fx_jump3.c"
-#include "res/fx_jump4.c"
-#include "res/fx_jump5.c"
-
-#include "res/spider_walk1.c"
-#include "res/spider_walk2.c"
-
-#include "res/zombi_walk1.c"
-#include "res/zombi_walk2.c"
-#include "res/zombi_walk3.c"
-
-#include "res/skel_walk1.c"
-#include "res/skel_walk2.c"
-#include "res/skel_walk3.c"
-
-#include "res/back_ground.c"
-
-#include "res/ground_top.c"
-#include "res/ground.c"
-#include "res/grass1.c"
-#include "res/grass2.c"
-#include "res/grass3.c"
-#include "res/rock_diamant.c"
-#include "res/rock_charbon.c"
-#include "res/rock_cuivre.c"
-#include "res/rock_empty.c"
-#include "res/rock_fer.c"
-#include "res/rock_jade.c"
-#include "res/rock_or.c"
-#include "res/rock_redstone.c"
-
-#include "res/diamant_small.c"
-#include "res/charbon_small.c"
-#include "res/cuivre_small.c"
-#include "res/rock_small.c"
-#include "res/fer_small.c"
-#include "res/jade_small.c"
-#include "res/or_small.c"
-#include "res/redstone_small.c"
-
-#include "res/tree1.c"
-#include "res/tree2.c"
-#include "res/tree3.c"
-
-
-#include "res/background_day.c"
-
-#include "res/pioche.c"
-
-#include "sounds/Jump.h"
-#include "sounds/Pioche.h"
-#include "sounds/RockBreaks.h"
-#include "sounds/ItemPickup.h"
-#include "sounds/Kick.h"
-
-#include "pmf_player.h"
 
 #ifndef _swap_int16_t
 #define _swap_int16_t(a, b) \
@@ -129,143 +41,7 @@ static const uint32_t PROGMEM pmf_aceman[] =
     }
 #endif
 
-uint8_t frameRate;
-uint16_t frameCount;
-uint8_t eachFrameMillis;
-long lastFrameStart;
-long nextFrameStart;
-bool post_render;
-uint8_t lastFrameDurationMs;
 
-extern Adafruit_SPIFlash Arcada_QSPI_Flash;
-
-Adafruit_Arcada arcada;
-uint16_t *framebuffer;
-GFXcanvas16 *canvas = NULL;
-int Swidth, Sheight;
-
-Adafruit_ZeroTimer zerotimer3 = Adafruit_ZeroTimer(3);
-
-static pmf_player s_player;
-static unsigned s_effect_channel = 0;
-
-typedef enum TGameStates
-{
-    STATE_MAIN_MENU,
-    STATE_PAUSE_MENU,
-    STATE_CREATE_CHARACTER,
-    STATE_GAME_MENU,
-    STATE_OPTIONS,
-    STATE_PLAYING,
-    STATE_CRAFTING,
-    STATE_GAMEOVER,
-} TGameStates;
-
-TGameStates gameState = STATE_MAIN_MENU;
-
-Particles parts;
-
-int briquesFRAMES = 0;
-
-int CURRENT_LEVEL = 1;
-
-int NB_WORLD_ENNEMIES = 0;
-int NB_WORLD_ITEMS = 0;
-int NB_WORLD_ZOMBIES = 0;
-int NB_WORLD_SPIDERS = 0;
-int NB_WORLD_SKELS = 0;
-
-int CURRENT_QUEUE_ITEMS = 0;
-
-int worldX = 0;
-int worldMIN_X = 0;
-int worldMAX_X = 0;
-int currentOffset_X = 0;
-
-int worldY = 0;
-int worldMIN_Y = 0;
-int worldMAX_Y = 0;
-int currentOffset_Y = 0;
-
-int worldOffset_pX = 0;
-int worldOffset_pY = 0;
-
-int counterActionB = 0;
-int coolDownActionB = 0;
-
-TPlayer Player;
-
-//Masque applique sur les tiles pour les eclairer
-#define PLAYER_LIGHT_MASK_HEIGHT 9
-#define PLAYER_LIGHT_MASK_WIDTH 9
-int16_t playerLightMask[PLAYER_LIGHT_MASK_HEIGHT][PLAYER_LIGHT_MASK_WIDTH] = {0};
-
-TworldTile WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
-#define HEADER_ROW WORLD_HEIGHT
-#define REF_ROW WORLD_HEIGHT + 1
-
-unsigned char SCREEN_WORLD_OVERLAY[(ARCADA_TFT_WIDTH + 1) / 16][(ARCADA_TFT_HEIGHT + 1) / 16];
-
-void createDropFrom(int wX, int wY, uint8_t type);
-void killItem(Titem *currentItem);
-void drawItems();
-void drawItem(Titem *currentItem);
-void drawHud();
-
-void killEnnemy(Tennemy *currentEnnemy, int px, int py);
-void drawEnnemy(Tennemy *currentEnnemy);
-void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy);
-void updateEnnemyIA(Tennemy *currentEnnemy);
-
-void drawEnnemies();
-void drawTiles();
-void drawParticles();
-void drawWorld();
-void pixelToWorld(int *pX, int *pY);
-bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y);
-void checkPlayerCollisionsEntities();
-void updatePlayer();
-void updateEnnemies();
-void updateItems();
-void updateGame();
-
-void displayGame();
-void initWorld();
-void postInitWorld();
-
-
-void anim_player_jump();
-void anim_player_dying();
-void anim_player_wining();
-void anim_player_idle();
-void anim_player_walk();
-void anim_player_falling();
-void anim_player_mining();
-void anim_player_digging();
-
-uint8_t pressed_buttons = 0;
-uint8_t just_pressed = 0;
-int SCORE = 0;
-bool bWin = false;
-
-int cameraX = 0;
-int cameraY = 0;
-
-int currentX_back = 0;
-
-int jumpPhase = 0;
-TworldTile brique_UP = {0};
-TworldTile brique_DOWN = {0};
-TworldTile brique_DOWN_FRONT = {0};
-TworldTile brique_FRONT = {0};
-TworldTile brique_PLAYER = {0};
-
-int count_player_die = 0;
-int count_player_win = 0;
-
-int16_t hauteurMaxBackground = 0;
-
-unsigned long prevDisplay = 0; // when the digital clock was displayed
 
 void PlayMOD(const void *pmf_file)
 {
@@ -543,12 +319,9 @@ void setup()
 
     setFrameRate(FPS);
 
-    stopMusic();
-    //playMusic(Pinball);
+    setup_timer3(100);
 
-    setup_timer3(150);
-    //arcada.timerCallback(100, MOD_callback);
-
+    StopMOD();
     PlayMOD(pmf_aceman);
     Serial.println("Starting");
 }
