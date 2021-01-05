@@ -10,10 +10,13 @@
 
 
 void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int8_t DIR = 1, int light = -1);
-void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lightR, int lightG, int lightB);
 void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light = -1);
 void drawWaterTile(int16_t px, int16_t py, const unsigned char *bitmap, int light = -1, uint8_t waterLevel = 0, bool bOnSurface = false);
-void drawTreeTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int16_t width, int16_t height, int light = -1);
+
+void drawTileMask(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light = -1);
+void drawWaterTileMask(int16_t px, int16_t py, const unsigned char *bitmap, int light = -1, uint8_t waterLevel = 0, bool bOnSurface = false);
+void drawTreeTileMask(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int16_t width, int16_t height, int light = -1);
+
 void drawImage(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap);
 void drawBackgroundImage(int16_t srcx, int16_t srcy, int16_t srcw, int16_t srch, const unsigned char *bitmap);
 

@@ -565,6 +565,7 @@ void postInitWorld()
     } while (wY > 0 && hauteurMaxBackground == 0);
     Serial.printf("hauteurMaxBackground:%d\n", hauteurMaxBackground);
 
+    
     //Musique
     StopMOD();
     PlayMOD(pmf_ninja);
@@ -659,7 +660,7 @@ void initWorld()
             //            float noise = noiseGen.fractal(8, (float)16*wX / (float)WORLD_WIDTH, (float)16*wY / (float)WORLD_HEIGHT);
             float noise = SimplexNoise::noise((float)16 * wX / (float)WORLD_WIDTH, (float)16 * wY / (float)WORLD_HEIGHT);
             int16_t densite = int(noise * AMPLITUDE_DENSITE);
-            if (WORLD[wY][wX].id <= BLOCK_GROUND)
+            if (WORLD[wY][wX].id >= BLOCK_GROUND && WORLD[wY][wX].id <= BLOCK_GROUND_ALL)
             {
                 if (densite > MAX_DENSITE)
                 {
@@ -776,20 +777,14 @@ void initWorld()
                 //Et celle du dessus par de l'herbe
                 if (wY - 1 >= 0)
                 {
-                    /*                    if (rand()%100 < 5)
-                    {
-                        WORLD[wY - 1][wX].id = BLOCK_TREE1 + rand()%3;
-                        WORLD[wY - 1][wX].attr.life = BLOCK_LIFE_NA;
-                        WORLD[wY - 1][wX].attr.traversable = 1;
-                        WORLD[wY - 1][wX].attr.opaque = 0;
-                    }*/
                     //12 pourcent de chance de mettre de l'herbe
                     if (rand() % 100 < 12)
                     {
-                        WORLD[wY - 1][wX].id = BLOCK_GRASS1 + rand() % 3;
+                        WORLD[wY - 1][wX].id = BLOCK_GRASS;
                         WORLD[wY - 1][wX].attr.life = BLOCK_LIFE_NA;
                         WORLD[wY - 1][wX].attr.traversable = 1;
                         WORLD[wY - 1][wX].attr.opaque = 1;
+                        WORLD[wY - 1][wX].attr.spriteVariation = rand() % 3;
                     }
                 }
 
@@ -798,13 +793,15 @@ void initWorld()
         }
     }
 
+    for (int wY = 0; wY < WORLD_HEIGHT; wY++)
+        ErosionUpdate();
+
     //TEST WATER
     for (int nbW = 0; nbW < WORLD_WIDTH - 4; nbW++)
     {
         int curP = WORLD[REF_ROW][4 + nbW].id;
         WORLD[(curP - 1)][4 + nbW].attr.Level = MAX_WATER_LEVEL;
-        WORLD[(curP - 3)][4 + nbW].attr.Level = MAX_WATER_LEVEL / 2;
-        WORLD[(curP - 5)][4 + nbW].attr.Level = 1;
+        WORLD[(curP - 3)][4 + nbW].attr.Level = MAX_WATER_LEVEL / 3;
     }
 
     //On update en boucle de force pour stabiliser l'eau
@@ -859,10 +856,11 @@ void initWorld()
 
         if (bFound)
         {
-            WORLD[hauteur - 1][posX].id = BLOCK_TREE1 + rand() % 3;
+            WORLD[hauteur - 1][posX].id = BLOCK_TREE;
             WORLD[hauteur - 1][posX].attr.life = BLOCK_LIFE_1;
             WORLD[hauteur - 1][posX].attr.traversable = 1;
             WORLD[hauteur - 1][posX].attr.opaque = 1;
+            WORLD[hauteur - 1][posX].attr.spriteVariation = rand() % 3;
             nbTrees++;
         }
         else
@@ -1174,8 +1172,6 @@ void drawItem(Titem *currentItem)
         switch (currentItem->type)
         {
         case ITEM_TREE1:
-        case ITEM_TREE2:
-        case ITEM_TREE3:
             drawSprite(px, py, item_buche1.width, item_buche1.height, item_buche1.pixel_data, 1);
             break;
         case ITEM_ROCK:
@@ -1346,6 +1342,64 @@ void drawEnnemies()
     }
 }
 
+const unsigned char *getGroundBlockData(uint8_t value)
+{
+    const unsigned char *pixel_data = NULL;
+
+    switch(value) {
+        case BLOCK_GROUND:
+            pixel_data = ground_00.pixel_data;
+            break;
+        case BLOCK_GROUND+0x01:
+            pixel_data = ground_01.pixel_data;
+            break;
+        case BLOCK_GROUND+0x02:
+            pixel_data = ground_02.pixel_data;
+            break;
+        case BLOCK_GROUND+0x03:
+            pixel_data = ground_03.pixel_data;
+            break;
+        case BLOCK_GROUND+0x04:
+            pixel_data = ground_04.pixel_data;
+            break;
+        case BLOCK_GROUND+0x05:
+            pixel_data = ground_05.pixel_data;
+            break;
+        case BLOCK_GROUND+0x06:
+            pixel_data = ground_06.pixel_data;
+            break;
+        case BLOCK_GROUND+0x07:
+            pixel_data = ground_07.pixel_data;
+            break;
+        case BLOCK_GROUND+0x08:
+            pixel_data = ground_08.pixel_data;
+            break;
+        case BLOCK_GROUND+0x09:
+            pixel_data = ground_09.pixel_data;
+            break;
+        case BLOCK_GROUND+0x0A:
+            pixel_data = ground_0A.pixel_data;
+            break;
+        case BLOCK_GROUND+0x0B:
+            pixel_data = ground_0B.pixel_data;
+            break;
+        case BLOCK_GROUND+0x0C:
+            pixel_data = ground_0C.pixel_data;
+            break;
+        case BLOCK_GROUND+0x0D:
+            pixel_data = ground_0D.pixel_data;
+            break;
+        case BLOCK_GROUND+0x0E:
+            pixel_data = ground_0E.pixel_data;
+            break;
+        case BLOCK_GROUND+0x0F:
+            pixel_data = ground_0F.pixel_data;
+            break;
+    }
+
+    return (const unsigned char *)pixel_data;
+}
+
 void drawTiles()
 {
     int playerLightStartX = Player.pos.worldX - (PLAYER_LIGHT_MASK_WIDTH / 2);
@@ -1410,7 +1464,6 @@ void drawTiles()
                     else if (value == BLOCK_UNDERGROUND_AIR)
                     {
                         //background de terrassement
-
                         if (brick->attr.Level > 0)
                         {
                             bool bOnSurface = false;
@@ -1422,58 +1475,19 @@ void drawTiles()
                         else
                             drawTile(px, py, back_ground.pixel_data, curLight);
                     }
-                    else if (value == BLOCK_GROUND_TOP) //
+                    else if (value >= BLOCK_GROUND && value <= BLOCK_GROUND_ALL)
                     {
-                        drawTile(px, py, ground_top.pixel_data, curLight);
+                        drawTile(px, py, getGroundBlockData(value), curLight);
                     }
-                    else if (value == BLOCK_GROUND) //
+                    else if (value == BLOCK_GRASS)
                     {
-                        drawTile(px, py, ground.pixel_data, curLight);
+                        //Les tiles avec masking sont dessinées dans drawTilesMasking
                     }
-                    else if (value == BLOCK_GRASS1) //
+                    else if (value == BLOCK_TREE)
                     {
-                        if (brick->attr.Level > 0)
-                        {
-                            bool bOnSurface = false;
-                            if (wY > 0)
-                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
-
-                            drawWaterTile(px, py, grass1.pixel_data, curLight, brick->attr.Level, bOnSurface);
-                        }
-                        else
-                            drawTile(px, py, grass1.pixel_data, curLight);
+                        //Les tiles avec masking sont dessinées dans drawTilesMasking
                     }
-                    else if (value == BLOCK_GRASS2) //
-                    {
-                        if (brick->attr.Level > 0)
-                        {
-                            bool bOnSurface = false;
-                            if (wY > 0)
-                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
-
-                            drawWaterTile(px, py, grass2.pixel_data, curLight, brick->attr.Level, bOnSurface);
-                        }
-                        else
-                            drawTile(px, py, grass2.pixel_data, curLight);
-                    }
-                    else if (value == BLOCK_GRASS3) //
-                    {
-                        if (brick->attr.Level > 0)
-                        {
-                            bool bOnSurface = false;
-                            if (wY > 0)
-                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
-
-                            drawWaterTile(px, py, grass3.pixel_data, curLight, brick->attr.Level, bOnSurface);
-                        }
-                        else
-                            drawTile(px, py, grass3.pixel_data, curLight);
-                    }
-                    else if (value == BLOCK_TREE1 || value == BLOCK_TREE2 || value == BLOCK_TREE3)
-                    {
-                        //Les arbres (tout objet trop grand) est dessine dans drawTilesBlob
-                    }
-                    else if (value == BLOCK_ROCK) //
+                    else if (value == BLOCK_ROCK)
                     {
                         drawTile(px, py, rock_empty.pixel_data, curLight);
                     }
@@ -1552,7 +1566,7 @@ void drawTiles()
     briquesFRAMES++;
 }
 
-void drawTilesBlob()
+void drawTilesMasking()
 {
     int playerLightStartX = Player.pos.worldX - (PLAYER_LIGHT_MASK_WIDTH / 2);
     int playerLightStartY = Player.pos.worldY - (PLAYER_LIGHT_MASK_HEIGHT / 2);
@@ -1606,40 +1620,49 @@ void drawTilesBlob()
 #ifdef DEBUG
                     curLight = MAX_LIGHT_INTENSITY;
 #endif
+                    if (value == BLOCK_GRASS) //
+                    {                        
+                        if (brick->attr.Level > 0)
+                        {
+                            bool bOnSurface = false;
+                            if (wY > 0)
+                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
+                            
+                            if (brick->attr.spriteVariation == 0)
+                                drawWaterTileMask(px, py, grass1.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                            else if (brick->attr.spriteVariation == 1)
+                                drawWaterTileMask(px, py, grass2.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                            else
+                                drawWaterTileMask(px, py, grass3.pixel_data, curLight, brick->attr.Level, bOnSurface);
 
-                    if (value == BLOCK_TREE1) //
-                    {
-                        if (brick->attr.hit)
-                        {
-                            int px2 = px + random(-itemShakeAmount, itemShakeAmount);
-                            int py2 = py + random(-(itemShakeAmount >> 1), itemShakeAmount >> 1);
-                            drawTreeTile(px2, py2, tree1.pixel_data, tree1.width, tree1.height, curLight);
                         }
                         else
-                            drawTreeTile(px, py, tree1.pixel_data, tree1.width, tree1.height, curLight);
+                        {
+                            if (brick->attr.spriteVariation == 0)
+                                drawTileMask(px, py, grass1.pixel_data, curLight);
+                            else if (brick->attr.spriteVariation == 1)
+                                drawTileMask(px, py, grass2.pixel_data, curLight);
+                            else
+                                drawTileMask(px, py, grass3.pixel_data, curLight);
+                        }
                     }
-                    else if (value == BLOCK_TREE2) //
+                    else if (value == BLOCK_TREE) //
                     {
+                        int realpx = px;
+                        int realpy = py;
                         if (brick->attr.hit)
                         {
-                            int px2 = px + random(-itemShakeAmount, itemShakeAmount);
-                            int py2 = py + random(-(itemShakeAmount >> 1), itemShakeAmount >> 1);
-                            drawTreeTile(px2, py2, tree2.pixel_data, tree2.width, tree2.height, curLight);
+                            realpx += random(-itemShakeAmount, itemShakeAmount);
+                            realpy += random(-(itemShakeAmount >> 1), itemShakeAmount >> 1);
                         }
+                        if (brick->attr.spriteVariation == 0)
+                            drawTreeTileMask(realpx, realpy, tree1.pixel_data, tree1.width, tree1.height, curLight);
+                        else if (brick->attr.spriteVariation == 1)
+                            drawTreeTileMask(realpx, realpy, tree2.pixel_data, tree2.width, tree2.height, curLight);
                         else
-                            drawTreeTile(px, py, tree2.pixel_data, tree2.width, tree2.height, curLight);
+                            drawTreeTileMask(realpx, realpy, tree3.pixel_data, tree3.width, tree3.height, curLight);
                     }
-                    else if (value == BLOCK_TREE3) //
-                    {
-                        if (brick->attr.hit)
-                        {
-                            int px2 = px + random(-itemShakeAmount, itemShakeAmount);
-                            int py2 = py + random(-(itemShakeAmount >> 1), itemShakeAmount >> 1);
-                            drawTreeTile(px2, py2, tree3.pixel_data, tree3.width, tree3.height, curLight);
-                        }
-                        else
-                            drawTreeTile(px, py, tree3.pixel_data, tree3.width, tree3.height, curLight);
-                    }
+                   
                 }
             }
         }
@@ -1781,8 +1804,6 @@ void drawHud()
         switch (item_id->typeItem)
         {
         case ITEM_TREE1:
-        case ITEM_TREE2:
-        case ITEM_TREE3:
             drawSprite(px, HUD_ITEMS_Y, item_buche1.width, item_buche1.height, item_buche1.pixel_data, 1);
             break;
         case ITEM_ROCK:
@@ -1834,10 +1855,12 @@ void drawWorld()
     if (worldMIN_Y < hauteurMaxBackground)
         drawBackgroundImage(0, 0, background_day.width, background_day.height, background_day.pixel_data);
 
+//           uint32_t now = micros();
     drawTiles();
 
-    drawTilesBlob();
+    drawTilesMasking();
     briquesFRAMES++;
+  //              Serial.printf("tiles:%d\n", micros() - now);
 
     drawEnnemies();
 
@@ -2742,10 +2765,45 @@ void updateWorld()
     else
     {
         //Update alternatif (lava ? anims ?)
-        FoliageUpdate();
+        //FoliageUpdate();
     }
+    
+    //Erosion
+    //un ligne a la fois
+    ErosionUpdate();    
 }
 
+void ErosionUpdate()
+{
+    for (lastColErosion = 0; lastColErosion < WORLD_WIDTH; lastColErosion++)
+    {
+        TworldTile *tile = &WORLD[lastRowErosion][lastColErosion];
+        TworldTile *tileL = lastColErosion > 0 ? &WORLD[lastRowErosion][lastColErosion-1] : NULL;
+        TworldTile *tileR = lastColErosion < (WORLD_WIDTH-1) ? &WORLD[lastRowErosion][lastColErosion+1] : NULL;
+        TworldTile *tileU = lastRowErosion > 0 ? &WORLD[lastRowErosion-1][lastColErosion] : NULL;
+        TworldTile *tileD = lastColErosion < (WORLD_HEIGHT-1) ? &WORLD[lastRowErosion+1][lastColErosion] : NULL;
+        if (tile->attr.traversable)
+            continue;
+
+        uint8_t matrix = BLOCK_GROUND;        
+        if (tile->id >= BLOCK_GROUND && tile->id <= BLOCK_GROUND_ALL)
+        {
+            if (tileL && tileL->attr.traversable)
+                matrix |= BLOCK_GROUND_LEFT;
+            if (tileR && tileR->attr.traversable)
+                matrix |= BLOCK_GROUND_RIGHT;
+            if (tileU && tileU->attr.traversable && tileU->attr.Level == 0)
+                matrix |= BLOCK_GROUND_TOP;
+            if (tileD && tileD->attr.traversable)
+                matrix |= BLOCK_GROUND_BOTTOM;
+
+            tile->id = matrix;
+        }
+    }
+    lastRowErosion++;
+    if (lastRowErosion == WORLD_HEIGHT)
+        lastRowErosion = 0;
+}
 void FoliageUpdate()
 {
     for (int wX = 0; wX < WORLD_WIDTH; wX++)
@@ -2767,13 +2825,13 @@ void FoliageUpdate()
             tile.id = BLOCK_GROUND;
             setWorldAt(wX, hauteur, tile);
             //On enleve l'herbe d'au dessus si besoin, on laisse les arbes ??
-            if (tileUp.id == BLOCK_GRASS1 || tileUp.id == BLOCK_GRASS2 || tileUp.id == BLOCK_GRASS3)
+            if (tileUp.id == BLOCK_GRASS)
             {
                 tileUp.id = BLOCK_AIR;
                 setWorldAt(wX, hauteur - 1, tileUp);
             }
         }
-        //        if (tileUp.id == BLOCK_TREE1 &&)
+        //        if (tileUp.id == BLOCK_TREE &&)
     }
 }
 
@@ -2960,7 +3018,7 @@ void checkPlayerInputs()
                 {
                     currentTileTarget.itemColor = RGBConvert(147, 122, 73);
                 }
-                else if (currentTileTarget.tile->id >= BLOCK_TREE1 && currentTileTarget.tile->id <= BLOCK_TREE3)
+                else if (currentTileTarget.tile->id == BLOCK_TREE)
                 {
                     currentTileTarget.itemColor = RGBConvert(158, 96, 47);
                 }
@@ -3002,7 +3060,7 @@ void checkPlayerInputs()
                         tile->attr.traversable = 1;
                         tile->attr.opaque = 1;
                     }
-                    else if (tile->id >= BLOCK_TREE1 && tile->id <= BLOCK_TREE3)
+                    else if (tile->id == BLOCK_TREE)
                     {
                         bHit = true;
                         //On casse tout l'arbre
@@ -3022,7 +3080,7 @@ void checkPlayerInputs()
 
                         //On enleve l'herbe si il y en avait
                         TworldTile brickUp = getWorldAt(currentTileTarget.wX, currentTileTarget.wY - 1);
-                        if (brickUp.id == BLOCK_GRASS1 || brickUp.id == BLOCK_GRASS2 || brickUp.id == BLOCK_GRASS3)
+                        if (brickUp.id == BLOCK_GRASS)
                         {
                             brickUp.id = BLOCK_AIR;
                             brickUp.attr.life = BLOCK_LIFE_NA;
@@ -3533,7 +3591,7 @@ void loop()
     //elapsedTime = millis() - now;
 
     //if (lastFrameDurationMs > (1000/FPS))
-    Serial.printf("LFD:%d\n", lastFrameDurationMs);
+    //Serial.printf("LFD:%d\n", lastFrameDurationMs);
 }
 
 void anim_player_idle()

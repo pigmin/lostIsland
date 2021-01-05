@@ -21,12 +21,12 @@ void WATER_Update();
 
 void WATER_UpdateFluidCell2(int x, int y);
 
-void FlowRight(TworldTile *cell, TworldTile *rightCell);
+inline void FlowRight(TworldTile *cell, TworldTile *rightCell);
 
-void FlowLeft(TworldTile *cell, TworldTile *leftCell);
+inline void FlowLeft(TworldTile *cell, TworldTile *leftCell);
 
-void FlowLeftRight(TworldTile *cell, TworldTile *leftCell, TworldTile *rightCell);
+inline void FlowLeftRight(TworldTile *cell, TworldTile *leftCell, TworldTile *rightCell);
 
-int FlowBottom(TworldTile *cell, TworldTile *bottomCell);
+inline int FlowBottom(TworldTile *cell, TworldTile *bottomCell);
 
 #endif

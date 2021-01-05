@@ -143,7 +143,9 @@ typedef struct {
 
           //1 si en cours de minage, pour effets divers
           uint8_t hit:1;
-          uint8_t __spare:3;
+          //permet de changer l'apparence en gardant le meme type (arbres par exemple)
+          uint8_t spriteVariation:2;
+          uint8_t __spare:1;
         };
         uint16_t RAW;
       } attr;

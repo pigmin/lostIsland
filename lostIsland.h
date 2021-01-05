@@ -74,6 +74,8 @@ int worldOffset_pY = 0;
 int counterActionB = 0;
 int coolDownActionB = 0;
 
+uint16_t lastRowErosion = 0;
+uint16_t lastColErosion = 0;
 
 int itemShakeAmount = 0;
 

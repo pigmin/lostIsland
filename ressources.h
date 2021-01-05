@@ -42,8 +42,23 @@
 
 //Tiles
 #include "res/back_ground.c"    //AIR_UNDERGROUND
-#include "res/ground_top.c"
-#include "res/ground.c"
+#include "res/ground_00.c"
+#include "res/ground_01.c"
+#include "res/ground_02.c"
+#include "res/ground_03.c"
+#include "res/ground_04.c"
+#include "res/ground_05.c"
+#include "res/ground_06.c"
+#include "res/ground_07.c"
+#include "res/ground_08.c"
+#include "res/ground_09.c"
+#include "res/ground_0A.c"
+#include "res/ground_0B.c"
+#include "res/ground_0C.c"
+#include "res/ground_0D.c"
+#include "res/ground_0E.c"
+#include "res/ground_0F.c"
+
 #include "res/rock_diamant.c"
 #include "res/rock_charbon.c"
 #include "res/rock_cuivre.c"

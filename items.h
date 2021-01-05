@@ -3,9 +3,7 @@
 
 #define ITEM_NONE           0
 
-#define ITEM_TREE1           BLOCK_TREE1  //6
-#define ITEM_TREE2           BLOCK_TREE2
-#define ITEM_TREE3           BLOCK_TREE3 
+#define ITEM_TREE1           BLOCK_TREE  //6
 
 #define ITEM_ROCK           BLOCK_ROCK  //0x10
 #define ITEM_CHARBON        BLOCK_CHARBON
