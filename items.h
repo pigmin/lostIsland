@@ -1,8 +1,12 @@
 #ifndef ITEMS_H
 #define ITEMS_H
 
-
 #define ITEM_NONE           0
+
+#define ITEM_TREE1           BLOCK_TREE1  //6
+#define ITEM_TREE2           BLOCK_TREE2
+#define ITEM_TREE3           BLOCK_TREE3 
+
 #define ITEM_ROCK           BLOCK_ROCK  //0x10
 #define ITEM_CHARBON        BLOCK_CHARBON
 #define ITEM_FER            BLOCK_FER
@@ -11,6 +15,8 @@
 #define ITEM_REDSTONE       BLOCK_REDSTONE  //0x17
 #define ITEM_DIAMANT        BLOCK_DIAMANT
 #define ITEM_JADE           BLOCK_JADE
+
+#define ITEM_PIOCHE_BOIS    0x7f
 
 typedef struct Titem {
     int worldX;
@@ -38,9 +44,10 @@ typedef struct Titem {
 } Titem;
 
 
+//Nombre max d'items dans le monde
 #define MAX_ITEMS 128
-
 Titem ITEMS[MAX_ITEMS];
+
 
     
 #endif

@@ -39,5 +39,10 @@
 #define JUMP_SPEED 10
 #define DOUBLE_JUMP_SPEED 8
 
+#define DEFAULT_ITEM_SHAKE_AMOUNT   6
+#define CAMERA_KILL_ENNEMY_AMOUNT   5
+
+//Nombre max de pile par type d'item
+#define MAX_STACK_ITEMS 64
 
 #endif

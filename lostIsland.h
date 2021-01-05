@@ -74,6 +74,13 @@ int worldOffset_pY = 0;
 int counterActionB = 0;
 int coolDownActionB = 0;
 
+
+int itemShakeAmount = 0;
+
+int cameraShakeAmount = 0;
+int cameraShakeX = 0;
+int cameraShakeY = 0;
+
 TPlayer Player;
 
 //Masque applique sur les tiles pour les eclairer
@@ -101,6 +108,15 @@ TworldTile brique_DOWN = {0};
 TworldTile brique_DOWN_FRONT = {0};
 TworldTile brique_FRONT = {0};
 TworldTile brique_PLAYER = {0};
+
+struct {
+    TworldTile  *tile;
+    int16_t     currentLife;
+    uint32_t    lastHit;
+    uint16_t    itemColor;
+    int         wX, wY;
+    int         pX, pY;    
+} currentTileTarget = {0};
 
 int count_player_die = 0;
 int count_player_win = 0;

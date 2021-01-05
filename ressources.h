@@ -40,13 +40,10 @@
 #include "res/skel_walk2.c"
 #include "res/skel_walk3.c"
 
-#include "res/back_ground.c"
-
+//Tiles
+#include "res/back_ground.c"    //AIR_UNDERGROUND
 #include "res/ground_top.c"
 #include "res/ground.c"
-#include "res/grass1.c"
-#include "res/grass2.c"
-#include "res/grass3.c"
 #include "res/rock_diamant.c"
 #include "res/rock_charbon.c"
 #include "res/rock_cuivre.c"
@@ -55,7 +52,16 @@
 #include "res/rock_jade.c"
 #include "res/rock_or.c"
 #include "res/rock_redstone.c"
+//HERBES
+#include "res/grass1.c"
+#include "res/grass2.c"
+#include "res/grass3.c"
+//ARBRES
+#include "res/tree1.c"
+#include "res/tree2.c"
+#include "res/tree3.c"
 
+//ITEMS (drop par exemple)
 #include "res/diamant_small.c"
 #include "res/charbon_small.c"
 #include "res/cuivre_small.c"
@@ -64,10 +70,7 @@
 #include "res/jade_small.c"
 #include "res/or_small.c"
 #include "res/redstone_small.c"
-
-#include "res/tree1.c"
-#include "res/tree2.c"
-#include "res/tree3.c"
+#include "res/item_buche1.c"
 
 
 #include "res/background_day.c"

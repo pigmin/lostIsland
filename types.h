@@ -3,7 +3,7 @@
 
 #define MAX_QUICK_ITEMS 8
 
-#define MAX_ITEMS 32
+#define MAX_BACKPACK_ITEMS 32
 
 //Bande morte sur l'axe X (ignorée par les tests de collision)
 #define PLAYER_X_BDM  4
@@ -23,7 +23,14 @@ typedef struct TPos
   int XFront;
   int YDown;
   int YUp;
-} TPos;
+} ;
+
+typedef struct TInventoryItem
+{
+  uint8_t typeItem;
+  uint8_t nbStack;
+  uint8_t life;
+};
 
 typedef struct TPlayer
 {
@@ -33,7 +40,7 @@ typedef struct TPlayer
   uint8_t current_framerate;
   uint8_t stateAnim;
 
-  struct  {
+  struct {
     uint8_t anim_frame;
     uint8_t current_framerate;
     uint8_t stateAnim;
@@ -43,6 +50,8 @@ typedef struct TPlayer
     int     speedX;
     int     speedY;
   } FX;
+
+
 
   int cible_wX, cible_wY;
   int cible_pX, cible_pY;
@@ -62,9 +71,8 @@ typedef struct TPlayer
 
 
   uint8_t  currentItemSelected;
-  uint8_t  quick_inventory[MAX_QUICK_ITEMS];
-
-  uint8_t  inventory[MAX_ITEMS];
+  TInventoryItem  quick_inventory[MAX_QUICK_ITEMS];
+  TInventoryItem  inventory[MAX_BACKPACK_ITEMS];
 
   unsigned char state;
   unsigned char action, action_cooldown, action_perf;
@@ -116,6 +124,8 @@ typedef struct Enemy
 #define  BLOCK_LIFE_6     6
 #define  BLOCK_LIFE_7     7
 
+//On multiplie la life par x pour plus de precision lors du minage
+#define TILE_LIFE_PRECISION 10
 
 typedef struct {
       uint8_t id;
@@ -131,8 +141,9 @@ typedef struct {
           uint8_t Direction:2;
           uint8_t Level:3;
 
-
-          uint8_t __spare:4;
+          //1 si en cours de minage, pour effets divers
+          uint8_t hit:1;
+          uint8_t __spare:3;
         };
         uint16_t RAW;
       } attr;

@@ -30,8 +30,6 @@ static const uint32_t PROGMEM pmf_aceman[] =
 #error("Please select TinyUSB for the USB stack!")
 #endif
 
-
-
 #ifndef _swap_int16_t
 #define _swap_int16_t(a, b) \
     {                       \
@@ -40,8 +38,6 @@ static const uint32_t PROGMEM pmf_aceman[] =
         b = t;              \
     }
 #endif
-
-
 
 void PlayMOD(const void *pmf_file)
 {
@@ -353,8 +349,7 @@ void initPlayer()
     Player.current_framerate = 0;
     Player.stateAnim = PLAYER_STATE_IDLE;
 
-    Player.cible_wX = Player.cible_wY = 0;
-    Player.cible_pX, Player.cible_pY = 0;
+    currentTileTarget = {0};
     /*
   unsigned char state;  
   unsigned char action, action_cooldown, action_perf;
@@ -553,8 +548,8 @@ void set_wining()
 void postInitWorld()
 {
     //Update necessaires au jeu apres init ou load
-//....recalcul hauteur, etc..
-    int wY = WORLD_HEIGHT-1;
+    //....recalcul hauteur, etc..
+    int wY = WORLD_HEIGHT - 1;
     hauteurMaxBackground = 0;
     do
     {
@@ -659,7 +654,7 @@ void initWorld()
         int curProdondeur = WORLD[HEADER_ROW][wX].id;
         curProdondeur = max(4, curProdondeur);
 
-        for (int wY = curProdondeur - 4; wY < (WORLD_HEIGHT-1); wY++)
+        for (int wY = curProdondeur - 4; wY < (WORLD_HEIGHT - 1); wY++)
         {
             //            float noise = noiseGen.fractal(8, (float)16*wX / (float)WORLD_WIDTH, (float)16*wY / (float)WORLD_HEIGHT);
             float noise = SimplexNoise::noise((float)16 * wX / (float)WORLD_WIDTH, (float)16 * wY / (float)WORLD_HEIGHT);
@@ -692,7 +687,7 @@ void initWorld()
                     WORLD[wY][wX].attr.opaque = 1;
                     if (wY >= curProdondeur + 5)
                     {
-                        if (wY <= curProdondeur+12)
+                        if (wY <= curProdondeur + 12)
                         {
                             if (randSeed < 2)
                             {
@@ -708,8 +703,7 @@ void initWorld()
                                 continue;
                             }
                         }
-                        else
-                        if (wY <= curProdondeur+29)
+                        else if (wY <= curProdondeur + 29)
                         {
                             if (randSeed < 2)
                             {
@@ -730,8 +724,7 @@ void initWorld()
                                 continue;
                             }
                         }
-                        else
-                        if (wY <= curProdondeur+54)
+                        else if (wY <= curProdondeur + 54)
                         {
                             if (randSeed < 20)
                             {
@@ -758,7 +751,7 @@ void initWorld()
     }
     for (int wX = 0; wX < WORLD_WIDTH; wX++)
     {
-        for (int wY = 0; wY < (WORLD_HEIGHT-1); wY++)
+        for (int wY = 0; wY < (WORLD_HEIGHT - 1); wY++)
         {
             TworldTile brick = WORLD[wY][wX];
             if (!WORLD[wY][wX].attr.traversable)
@@ -783,7 +776,7 @@ void initWorld()
                 //Et celle du dessus par de l'herbe
                 if (wY - 1 >= 0)
                 {
-/*                    if (rand()%100 < 5)
+                    /*                    if (rand()%100 < 5)
                     {
                         WORLD[wY - 1][wX].id = BLOCK_TREE1 + rand()%3;
                         WORLD[wY - 1][wX].attr.life = BLOCK_LIFE_NA;
@@ -791,9 +784,9 @@ void initWorld()
                         WORLD[wY - 1][wX].attr.opaque = 0;
                     }*/
                     //12 pourcent de chance de mettre de l'herbe
-                    if (rand()%100 < 12)
+                    if (rand() % 100 < 12)
                     {
-                        WORLD[wY - 1][wX].id = BLOCK_GRASS1 + rand()%3;
+                        WORLD[wY - 1][wX].id = BLOCK_GRASS1 + rand() % 3;
                         WORLD[wY - 1][wX].attr.life = BLOCK_LIFE_NA;
                         WORLD[wY - 1][wX].attr.traversable = 1;
                         WORLD[wY - 1][wX].attr.opaque = 1;
@@ -805,19 +798,19 @@ void initWorld()
         }
     }
 
-    //TEST WATER    
-    for (int nbW = 0; nbW < WORLD_WIDTH-4; nbW++)
+    //TEST WATER
+    for (int nbW = 0; nbW < WORLD_WIDTH - 4; nbW++)
     {
-        int curP = WORLD[REF_ROW][4+nbW].id;
-        WORLD[(curP-1)][4+nbW].attr.Level = MAX_WATER_LEVEL;
-        WORLD[(curP-3)][4+nbW].attr.Level = MAX_WATER_LEVEL/2;
-        WORLD[(curP-5)][4+nbW].attr.Level = 1;
+        int curP = WORLD[REF_ROW][4 + nbW].id;
+        WORLD[(curP - 1)][4 + nbW].attr.Level = MAX_WATER_LEVEL;
+        WORLD[(curP - 3)][4 + nbW].attr.Level = MAX_WATER_LEVEL / 2;
+        WORLD[(curP - 5)][4 + nbW].attr.Level = 1;
     }
 
     //On update en boucle de force pour stabiliser l'eau
     for (int nbWaterUp = 0; nbWaterUp < 500; nbWaterUp++)
         WATER_Update();
-    
+
     //VEGETATION
     int nbTries = 0;
     for (int nbTrees = 0; nbTrees < MAX_TREES; nbTries < 50)
@@ -857,16 +850,16 @@ void initWorld()
                 tileDD = getWorldAt(posX + 2, hauteur - 1);
             }
             nbSearch++;
-            
-        }  while ( !tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
-                !tile1.attr.traversable && !tileG1.attr.traversable && !tileD1.attr.traversable &&
-                !tile2.attr.traversable && !tileG2.attr.traversable && !tileD2.attr.traversable &&
-                !tile.attr.Level == 0 && !tileG.attr.Level == 0 && !tileD.attr.Level == 0 &&
-                !tileGG.attr.traversable && !tileDD.attr.traversable && nbSearch < 50);
+
+        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
+                 !tile1.attr.traversable && !tileG1.attr.traversable && !tileD1.attr.traversable &&
+                 !tile2.attr.traversable && !tileG2.attr.traversable && !tileD2.attr.traversable &&
+                 !tile.attr.Level == 0 && !tileG.attr.Level == 0 && !tileD.attr.Level == 0 &&
+                 !tileGG.attr.traversable && !tileDD.attr.traversable && nbSearch < 50);
 
         if (bFound)
         {
-            WORLD[hauteur - 1][posX].id = BLOCK_TREE1 + rand()%3;
+            WORLD[hauteur - 1][posX].id = BLOCK_TREE1 + rand() % 3;
             WORLD[hauteur - 1][posX].attr.life = BLOCK_LIFE_1;
             WORLD[hauteur - 1][posX].attr.traversable = 1;
             WORLD[hauteur - 1][posX].attr.opaque = 1;
@@ -877,7 +870,6 @@ void initWorld()
             //Echec, on retente 50 fois pas plus
             nbTries++;
         }
-        
     }
 
     NB_WORLD_ENNEMIES = 0;
@@ -898,7 +890,7 @@ void initWorld()
             tileD = getWorldAt(posX + 1, hauteur - 1);
             // @todo tester que le zombi est pas deja sur un autre ennemi (un marqueur sur la tile ? )
         } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
-                !tile.attr.Level && !tileG.attr.Level && !tileD.attr.Level);
+                 !tile.attr.Level && !tileG.attr.Level && !tileD.attr.Level);
 
         //Skel
         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
@@ -941,7 +933,7 @@ void initWorld()
             tileD = getWorldAt(posX + 1, hauteur - 1);
             // @todo tester que le zombi est pas deja sur un autre ennemi (un marqueur sur la tile ? )
         } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
-                !tile.attr.Level && !tileG.attr.Level && !tileD.attr.Level);
+                 !tile.attr.Level && !tileG.attr.Level && !tileD.attr.Level);
 
         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
         ENNEMIES[NB_WORLD_ENNEMIES].worldX = posX;
@@ -966,7 +958,7 @@ void initWorld()
         NB_WORLD_ENNEMIES++;
         NB_WORLD_ZOMBIES++;
     }
-    
+
     //Spiders
     for (int wX = BASE_X_PLAYER + 5; wX < WORLD_WIDTH - 1; wX += 3)
     {
@@ -979,7 +971,7 @@ void initWorld()
             {
                 if (seed <= 60)
                 {
-                    if (WORLD[wY][wX].attr.traversable && WORLD[wY][wX].attr.Level==0  && WORLD[wY][wX + 1].attr.traversable && WORLD[wY][wX - 1].attr.traversable && WORLD[wY - 1][wX].attr.traversable)
+                    if (WORLD[wY][wX].attr.traversable && WORLD[wY][wX].attr.Level == 0 && WORLD[wY][wX + 1].attr.traversable && WORLD[wY][wX - 1].attr.traversable && WORLD[wY - 1][wX].attr.traversable)
                     {
                         //Spiders
                         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
@@ -1106,7 +1098,7 @@ void drawPlayer()
 void createDropFrom(int wX, int wY, uint8_t type)
 {
     ITEMS[CURRENT_QUEUE_ITEMS].bIsAlive = 255;
-    ITEMS[CURRENT_QUEUE_ITEMS].bIsActive = true;
+    ITEMS[CURRENT_QUEUE_ITEMS].bIsActive = false;
     ITEMS[CURRENT_QUEUE_ITEMS].iSpawning = 1 * FPS;
 
     ITEMS[CURRENT_QUEUE_ITEMS].worldX = wX;
@@ -1174,13 +1166,18 @@ void drawItem(Titem *currentItem)
     */
     //Recentrage
     //px -= 4;
-    const int8_t lookUpItems[7] = {0, 1, 2, 4, 4, 2, 1};
-    py = py - lookUpItems[(briquesFRAMES / 4) % 7];
+    const int8_t lookUpItems[7] = {-2, -1, 0, 2, 2, 0, -1};
+    py = py + lookUpItems[(briquesFRAMES / 4) % 7];
     //Serial.printf("Item:%d %d,%d\n", currentItem->type, px, py);
     if (px < ARCADA_TFT_WIDTH && px > -16 && py < ARCADA_TFT_HEIGHT && py > -16)
     {
         switch (currentItem->type)
         {
+        case ITEM_TREE1:
+        case ITEM_TREE2:
+        case ITEM_TREE3:
+            drawSprite(px, py, item_buche1.width, item_buche1.height, item_buche1.pixel_data, 1);
+            break;
         case ITEM_ROCK:
             drawSprite(px, py, rock_small.width, rock_small.height, rock_small.pixel_data, 1);
             break;
@@ -1373,7 +1370,7 @@ void drawTiles()
 
                     int curLight = MAX_LIGHT_INTENSITY;
                     // @todo gerer la nuit (dans ce cas pas de max light et ground.. ou la lune ?)
-                    if (brick->attr.opaque)// || wY > profondeurColonne)
+                    if (brick->attr.opaque) // || wY > profondeurColonne)
                     {
                         if (profondeurColonne != 0)
                         {
@@ -1404,7 +1401,7 @@ void drawTiles()
                         {
                             bool bOnSurface = false;
                             if (wY > 0)
-                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+                                bOnSurface = (WORLD[wY - 1][wX].attr.Level == 0); // && WORLD[wY - 1][wX].attr.traversable);
 
                             drawWaterTile(px, py, NULL, curLight, brick->attr.Level, bOnSurface);
                         }
@@ -1413,18 +1410,17 @@ void drawTiles()
                     else if (value == BLOCK_UNDERGROUND_AIR)
                     {
                         //background de terrassement
-                        
+
                         if (brick->attr.Level > 0)
                         {
                             bool bOnSurface = false;
                             if (wY > 0)
-                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+                                bOnSurface = (WORLD[wY - 1][wX].attr.Level == 0); // && WORLD[wY - 1][wX].attr.traversable);
 
                             drawWaterTile(px, py, back_ground.pixel_data, curLight, brick->attr.Level, bOnSurface);
                         }
                         else
                             drawTile(px, py, back_ground.pixel_data, curLight);
-
                     }
                     else if (value == BLOCK_GROUND_TOP) //
                     {
@@ -1440,7 +1436,7 @@ void drawTiles()
                         {
                             bool bOnSurface = false;
                             if (wY > 0)
-                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
 
                             drawWaterTile(px, py, grass1.pixel_data, curLight, brick->attr.Level, bOnSurface);
                         }
@@ -1453,7 +1449,7 @@ void drawTiles()
                         {
                             bool bOnSurface = false;
                             if (wY > 0)
-                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
 
                             drawWaterTile(px, py, grass2.pixel_data, curLight, brick->attr.Level, bOnSurface);
                         }
@@ -1466,24 +1462,16 @@ void drawTiles()
                         {
                             bool bOnSurface = false;
                             if (wY > 0)
-                                bOnSurface = ((WORLD[wY-1][wX].attr.Level == 0) && WORLD[wY-1][wX].attr.traversable);
+                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
 
                             drawWaterTile(px, py, grass3.pixel_data, curLight, brick->attr.Level, bOnSurface);
                         }
                         else
                             drawTile(px, py, grass3.pixel_data, curLight);
                     }
-                    else if (value == BLOCK_TREE1) //
+                    else if (value == BLOCK_TREE1 || value == BLOCK_TREE2 || value == BLOCK_TREE3)
                     {
-                        drawTreeTile(px, py, tree1.pixel_data, tree1.width, tree1.height, curLight);
-                    }
-                    else if (value == BLOCK_TREE2) //
-                    {
-                        drawTreeTile(px, py, tree2.pixel_data, tree2.width, tree2.height, curLight);
-                    }
-                    else if (value == BLOCK_TREE3) //
-                    {
-                        drawTreeTile(px, py, tree3.pixel_data, tree3.width, tree3.height, curLight);
+                        //Les arbres (tout objet trop grand) est dessine dans drawTilesBlob
                     }
                     else if (value == BLOCK_ROCK) //
                     {
@@ -1564,7 +1552,6 @@ void drawTiles()
     briquesFRAMES++;
 }
 
-
 void drawTilesBlob()
 {
     int playerLightStartX = Player.pos.worldX - (PLAYER_LIGHT_MASK_WIDTH / 2);
@@ -1572,7 +1559,7 @@ void drawTilesBlob()
     int playerLightEndX = playerLightStartX + (PLAYER_LIGHT_MASK_WIDTH - 1);
     int playerLightEndY = playerLightStartY + (PLAYER_LIGHT_MASK_HEIGHT - 1);
 
-    for (int wX = worldMIN_X-1; wX < worldMAX_X+1; wX++)
+    for (int wX = worldMIN_X - 1; wX < worldMAX_X + 1; wX++)
     {
         if (wX < 0 || wX >= WORLD_WIDTH)
             continue;
@@ -1582,7 +1569,7 @@ void drawTilesBlob()
         int px = ((wX - worldMIN_X) * 16) - currentOffset_X;
         if ((px < ARCADA_TFT_WIDTH + 16) && (px > -16))
         {
-            for (int wY = worldMIN_Y-1; wY < worldMAX_Y+1; wY++)
+            for (int wY = worldMIN_Y - 1; wY < worldMAX_Y + 1; wY++)
             {
                 if (wY < 0 || wY >= WORLD_HEIGHT)
                     continue;
@@ -1595,7 +1582,7 @@ void drawTilesBlob()
 
                     int curLight = MAX_LIGHT_INTENSITY;
                     // @todo gerer la nuit (dans ce cas pas de max light et ground.. ou la lune ?)
-                    if (brick->attr.opaque)// || wY > profondeurColonne)
+                    if (brick->attr.opaque) // || wY > profondeurColonne)
                     {
                         if (profondeurColonne != 0)
                         {
@@ -1622,17 +1609,37 @@ void drawTilesBlob()
 
                     if (value == BLOCK_TREE1) //
                     {
-                        drawTreeTile(px, py, tree1.pixel_data, tree1.width, tree1.height, curLight);
+                        if (brick->attr.hit)
+                        {
+                            int px2 = px + random(-itemShakeAmount, itemShakeAmount);
+                            int py2 = py + random(-(itemShakeAmount >> 1), itemShakeAmount >> 1);
+                            drawTreeTile(px2, py2, tree1.pixel_data, tree1.width, tree1.height, curLight);
+                        }
+                        else
+                            drawTreeTile(px, py, tree1.pixel_data, tree1.width, tree1.height, curLight);
                     }
                     else if (value == BLOCK_TREE2) //
                     {
-                        drawTreeTile(px, py, tree2.pixel_data, tree2.width, tree2.height, curLight);
+                        if (brick->attr.hit)
+                        {
+                            int px2 = px + random(-itemShakeAmount, itemShakeAmount);
+                            int py2 = py + random(-(itemShakeAmount >> 1), itemShakeAmount >> 1);
+                            drawTreeTile(px2, py2, tree2.pixel_data, tree2.width, tree2.height, curLight);
+                        }
+                        else
+                            drawTreeTile(px, py, tree2.pixel_data, tree2.width, tree2.height, curLight);
                     }
                     else if (value == BLOCK_TREE3) //
                     {
-                        drawTreeTile(px, py, tree3.pixel_data, tree3.width, tree3.height, curLight);
+                        if (brick->attr.hit)
+                        {
+                            int px2 = px + random(-itemShakeAmount, itemShakeAmount);
+                            int py2 = py + random(-(itemShakeAmount >> 1), itemShakeAmount >> 1);
+                            drawTreeTile(px2, py2, tree3.pixel_data, tree3.width, tree3.height, curLight);
+                        }
+                        else
+                            drawTreeTile(px, py, tree3.pixel_data, tree3.width, tree3.height, curLight);
                     }
-                    
                 }
             }
         }
@@ -1731,36 +1738,84 @@ void debugInfos()
     }
 }
 
-void drawHud()
+void drawEffects()
 {
     // @todo : pas vraiment ici que ce devrait etre fait...
     if (counterActionB > 0)
     {
-        if (Player.cible_pX > -16 && Player.cible_pX < ARCADA_TFT_WIDTH && Player.cible_pY > -16 && Player.cible_pY < ARCADA_TFT_HEIGHT)
+        if (currentTileTarget.tile->id != BLOCK_AIR && currentTileTarget.tile->id != BLOCK_UNDERGROUND_AIR && currentTileTarget.pX > -16 && currentTileTarget.pX < ARCADA_TFT_WIDTH && currentTileTarget.pY > -16 && currentTileTarget.pY < ARCADA_TFT_HEIGHT)
         {
             //Test action pour le sprite, pour l'instant la pioche
-            // drawSprite(Player.cible_pX, Player.cible_pY, pioche.width, pioche.height, pioche.pixel_data, Player.pos.direction);
+            // drawSprite(currentTileTarget.pX, currentTileTarget.pY, pioche.width, pioche.height, pioche.pixel_data, Player.pos.direction);
             if ((counterActionB % FRAMES_ANIM_ACTION_B) == 0)
             {
-                parts.createExplosion(Player.cible_pX + 8, Player.cible_pY + 8, 8); //@todo colorer avec la couleur de la brique en cours de travail
+                parts.createExplosion(currentTileTarget.pX + 8, currentTileTarget.pY + 8, 8, currentTileTarget.itemColor); //@todo colorer avec la couleur de la brique en cours de travail
                 sndPlayerCanal1.play(AudioSamplePioche);
+
+                currentTileTarget.tile->attr.hit = 1;
+                itemShakeAmount = DEFAULT_ITEM_SHAKE_AMOUNT;
             }
         }
     }
+    if (itemShakeAmount > 0)
+        itemShakeAmount--;
 
+    if (cameraShakeAmount > 0)
+    {
+        cameraShakeAmount--;
+    }
+}
+
+void drawHud()
+{
     //Quick items
+    canvas->fillRect(HUD_ITEMS_X, HUD_ITEMS_Y, 16 * MAX_QUICK_ITEMS, 16, ARCADA_LIGHTGREY);
+
     for (uint8_t it = 0; it < MAX_QUICK_ITEMS; it++)
     {
-        if (it == Player.currentItemSelected)
-            canvas->drawRect(HUD_ITEMS_X + (it * 16), HUD_ITEMS_Y, 16, 16, ARCADA_MAGENTA);
-        else
-            canvas->drawRect(HUD_ITEMS_X + (it * 16), HUD_ITEMS_Y, 16, 16, ARCADA_WHITE);
-        uint8_t item_id = Player.quick_inventory[it];
-        if (item_id != 0)
+        int px = HUD_ITEMS_X + (it * 16);
+        TInventoryItem *item_id = &Player.quick_inventory[it];
+        //        if (item_id->typeItem != 0)
+        //          canvas->fillRect(px+1, HUD_ITEMS_Y+1, 14, 14, ARCADA_WHITE);
+
+        switch (item_id->typeItem)
         {
-            ///draw Item sprite
+        case ITEM_TREE1:
+        case ITEM_TREE2:
+        case ITEM_TREE3:
+            drawSprite(px, HUD_ITEMS_Y, item_buche1.width, item_buche1.height, item_buche1.pixel_data, 1);
+            break;
+        case ITEM_ROCK:
+            drawSprite(px, HUD_ITEMS_Y, rock_small.width, rock_small.height, rock_small.pixel_data, 1);
+            break;
+        case ITEM_CHARBON:
+            drawSprite(px, HUD_ITEMS_Y, charbon_small.width, charbon_small.height, charbon_small.pixel_data, 1);
+            break;
+        case ITEM_CUIVRE:
+            drawSprite(px, HUD_ITEMS_Y, cuivre_small.width, cuivre_small.height, cuivre_small.pixel_data, 1);
+            break;
+        case ITEM_FER:
+            drawSprite(px, HUD_ITEMS_Y, fer_small.width, fer_small.height, fer_small.pixel_data, 1);
+            break;
+        case ITEM_DIAMANT:
+            drawSprite(px, HUD_ITEMS_Y, diamant_small.width, diamant_small.height, diamant_small.pixel_data, 1);
+            break;
+        case ITEM_JADE:
+            drawSprite(px, HUD_ITEMS_Y, jade_small.width, jade_small.height, jade_small.pixel_data, 1);
+            break;
+        case ITEM_OR:
+            drawSprite(px, HUD_ITEMS_Y, or_small.width, or_small.height, or_small.pixel_data, 1);
+            break;
+        case ITEM_REDSTONE:
+            drawSprite(px, HUD_ITEMS_Y, redstone_small.width, redstone_small.height, redstone_small.pixel_data, 1);
+            break;
         }
+        if (it == Player.currentItemSelected)
+            canvas->drawRect(px, HUD_ITEMS_Y, 16, 16, ARCADA_MAGENTA);
+        else
+            canvas->drawRect(px, HUD_ITEMS_Y, 16, 16, ARCADA_WHITE);
     }
+
     //Health / Magie...
     int lgHealth = 30 * Player.health / Player.max_health;
 
@@ -1773,8 +1828,6 @@ void drawHud()
     arcada.pixels.show();
 }
 
-
-
 void drawWorld()
 {
     //On dessine le background uniquement si on peut le voir, en sous sol on l'ignore, les tiles "background air" etant sans transparence
@@ -1782,9 +1835,9 @@ void drawWorld()
         drawBackgroundImage(0, 0, background_day.width, background_day.height, background_day.pixel_data);
 
     drawTiles();
+
     drawTilesBlob();
     briquesFRAMES++;
-
 
     drawEnnemies();
 
@@ -1793,6 +1846,8 @@ void drawWorld()
     drawPlayer();
 
     drawParticles();
+
+    drawEffects();
 
     drawHud();
 
@@ -2035,10 +2090,16 @@ void calculatePlayerCoords()
 void calculateWorldCoordinates()
 {
     cameraX = Player.pos.pX - (ARCADA_TFT_WIDTH / 2);
+    if (cameraShakeAmount > 0)
+        cameraX += random(-cameraShakeAmount, cameraShakeAmount);        
+
     cameraX = max(cameraX, 0);
     cameraX = min(cameraX, ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH);
 
     cameraY = Player.pos.pY - (ARCADA_TFT_HEIGHT / 2);
+    if (cameraShakeAmount > 0)
+        cameraY += random(-cameraShakeAmount, cameraShakeAmount);        
+
     cameraY = max(cameraY, 0);
     cameraY = min(cameraY, ((WORLD_HEIGHT - 1) * 16) - ARCADA_TFT_HEIGHT);
 
@@ -2061,12 +2122,61 @@ void calculateWorldCoordinates()
     worldOffset_pY = (worldMIN_Y * 16) + currentOffset_Y;
 }
 
-int playerPickupItem(Titem *currentItem)
+bool playerPickupItem(Titem *currentItem)
 {
-    int ret = 0;
+    bool ret = false;
 
     //inventaire ?
-    ret = 1;
+    int index_stack = -1;
+    int index_new_quick = -1;
+    int index_new = -1;
+    for (int inv = 0; inv < MAX_QUICK_ITEMS; inv++)
+    {
+        if (Player.quick_inventory[inv].typeItem == currentItem->type && Player.quick_inventory[inv].nbStack < MAX_STACK_ITEMS)
+        {
+            index_stack = inv;
+            break;
+        }
+        else if (Player.quick_inventory[inv].typeItem == 0 && index_new_quick == -1)
+            index_new_quick = inv;
+    }
+    if (index_stack != -1)
+    {
+        Player.quick_inventory[index_stack].typeItem = currentItem->type;
+        Player.quick_inventory[index_stack].nbStack++;
+        ret = true;
+    }
+    else
+    {
+        for (int inv = 0; inv < MAX_BACKPACK_ITEMS; inv++)
+        {
+            if (Player.inventory[inv].typeItem == currentItem->type && Player.inventory[inv].nbStack < MAX_STACK_ITEMS)
+            {
+                index_stack = inv;
+                break;
+            }
+            else if (Player.inventory[inv].typeItem == 0 && index_new == -1)
+                index_new = inv;
+        }
+        if (index_stack != -1)
+        {
+            Player.inventory[index_stack].typeItem = currentItem->type;
+            Player.inventory[index_stack].nbStack++;
+            ret = true;
+        }
+        else if (index_new_quick != -1)
+        {
+            Player.quick_inventory[index_new_quick].typeItem = currentItem->type;
+            Player.quick_inventory[index_new_quick].nbStack++;
+            ret = true;
+        }
+        else if (index_new != -1)
+        {
+            Player.inventory[index_new].typeItem = currentItem->type;
+            Player.inventory[index_new].nbStack++;
+            ret = true;
+        }
+    }
 
     return ret;
 }
@@ -2182,7 +2292,8 @@ void checkPlayerCollisionsEntities()
                         sndPlayerCanal3.play(AudioSample__Kick);
                         SCORE += 5;
                         killEnnemy(currentEnnemy, px, py);
-                        //rebond
+                        cameraShakeAmount = CAMERA_KILL_ENNEMY_AMOUNT;
+                        //rebond ?
                         Player.pos.speedY = JUMP_SPEED / 3;
                     }
                     else
@@ -2617,24 +2728,22 @@ void checkItemCollisionsWorld(Titem *currentItem)
     currentItem->worldY = currentItem->y / 16;
 }
 
-void updateWorld() 
+void updateWorld()
 {
     //on fait les verifications sur les briques, les anims, etc, repousser l'herbe sur les hauteur (ground top et herbes)
-
 
     //gestion de l'eau...
     if (everyXFrames(2))
     {
-//        uint32_t now = micros();
+        //        uint32_t now = micros();
         WATER_Update();
-//        Serial.printf("WatUpd:%d\n", micros() - now);
+        //        Serial.printf("WatUpd:%d\n", micros() - now);
     }
     else
     {
         //Update alternatif (lava ? anims ?)
         FoliageUpdate();
     }
-    
 }
 
 void FoliageUpdate()
@@ -2644,7 +2753,7 @@ void FoliageUpdate()
         int hauteur = WORLD[HEADER_ROW][wX].id;
         TworldTile tile = getWorldAt(wX, hauteur);
         TworldTile tileUp = getWorldAt(wX, hauteur - 1);
-        int randSeed = random(0,1000);
+        int randSeed = random(0, 1000);
 
         //on transforme les ground en ground top si ils sont en surface
         if (tile.id == BLOCK_GROUND && tileUp.attr.Level == 0 && randSeed < 25)
@@ -2661,10 +2770,10 @@ void FoliageUpdate()
             if (tileUp.id == BLOCK_GRASS1 || tileUp.id == BLOCK_GRASS2 || tileUp.id == BLOCK_GRASS3)
             {
                 tileUp.id = BLOCK_AIR;
-                setWorldAt(wX, hauteur-1, tileUp);
+                setWorldAt(wX, hauteur - 1, tileUp);
             }
         }
-//        if (tileUp.id == BLOCK_TREE1 &&)
+        //        if (tileUp.id == BLOCK_TREE1 &&)
     }
 }
 
@@ -2812,119 +2921,130 @@ void checkPlayerInputs()
             gameState = STATE_GAME_MENU;
         }
     }
-
+    //@todo : virer le test onGround pour attaques aeriennes..
     if (coolDownActionB <= 0 && (pressed_buttons & ARCADA_BUTTONMASK_B) && Player.bOnGround)
     {
         counterActionB++;
 
-        int lastCibleX = Player.cible_wX;
-        int lastCibleY = Player.cible_wY;
+        int lastCibleX = currentTileTarget.wX;
+        int lastCibleY = currentTileTarget.wY;
 
         //Ciblage, on laisse un peu de temps pour locker la cible
         if (counterActionB < FRAMES_LOCK_ACTION_B)
         {
-            if ((pressed_buttons & ARCADA_BUTTONMASK_LEFT) || (pressed_buttons & ARCADA_BUTTONMASK_RIGHT))
+            if (pressed_buttons & ARCADA_BUTTONMASK_UP)
             {
-                if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
-                {
-                    Player.cible_wX = Player.pos.XFront;
-                    Player.cible_wY = Player.pos.YDown;
-                }
-                else if (pressed_buttons & ARCADA_BUTTONMASK_UP)
-                {
-                    Player.cible_wX = Player.pos.XFront;
-                    Player.cible_wY = Player.pos.YUp;
-                }
-                else
-                {
-                    Player.cible_wX = Player.pos.XFront;
-                    Player.cible_wY = Player.pos.worldY;
-                }
+                currentTileTarget.wX = Player.pos.worldX;
+                currentTileTarget.wY = Player.pos.YUp;
+            }
+            else if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
+            {
+                currentTileTarget.wX = Player.pos.worldX;
+                currentTileTarget.wY = Player.pos.YDown;
             }
             else
             {
-                if (pressed_buttons & ARCADA_BUTTONMASK_UP)
-                {
-                    Player.cible_wX = Player.pos.worldX;
-                    Player.cible_wY = Player.pos.YUp;
-                }
-                else if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
-                {
-                    Player.cible_wX = Player.pos.worldX;
-                    Player.cible_wY = Player.pos.YDown;
-                }
-                else
-                {
-                    //'Devant'
-                    Player.cible_wX = Player.pos.XFront;
-                    Player.cible_wY = Player.pos.worldY;
-                }
+                //'Devant'
+                currentTileTarget.wX = Player.pos.XFront;
+                currentTileTarget.wY = Player.pos.worldY;
             }
-        }
 
-        if ((Player.cible_wX != lastCibleX) || (Player.cible_wY != lastCibleY))
-        {
-            counterActionB = 0;
-            Player.cible_pX = ((Player.cible_wX - worldMIN_X) * 16) - currentOffset_X;
-            Player.cible_pY = ((Player.cible_wY - worldMIN_Y) * 16) - currentOffset_Y;
-        }
-
-        if (counterActionB >= FRAMES_ACTION_B) //Action (pour le moment minage seulement)
-        {
-            TworldTile tile = getWorldAt(Player.cible_wX, Player.cible_wY);
-
-            counterActionB = 0;
-            coolDownActionB = FRAMES_COOLDOWN_B;
-            lastCibleX = lastCibleY = 0;
-
-            //Serial.printf("Dig:%d,%d v:%d\n", Player.cible_wX, Player.cible_wY, tile);
-            if (tile.attr.life != BLOCK_LIFE_NA && !tile.attr.traversable && Player.pos.YDown < (WORLD_HEIGHT - 1))
+            if (currentTileTarget.wX != lastCibleX || currentTileTarget.wY != lastCibleY)
             {
-                uint8_t hauteur_sol = WORLD[REF_ROW][Player.cible_wX].id;
-                //on teste si on a creusé dans de la pierre solide et on exclue aussi le ground ( @todo : spawn herbe quand meme )
-                if (tile.id >= BLOCK_ROCK && tile.attr.life != BLOCK_LIFE_NA)
+                counterActionB = 0;
+                currentTileTarget.pX = ((currentTileTarget.wX - worldMIN_X) * 16) - currentOffset_X;
+                currentTileTarget.pY = ((currentTileTarget.wY - worldMIN_Y) * 16) - currentOffset_Y;
+                currentTileTarget.tile = &WORLD[currentTileTarget.wY][currentTileTarget.wX];
+                currentTileTarget.currentLife = currentTileTarget.tile->attr.life * TILE_LIFE_PRECISION;
+                if (currentTileTarget.tile->id >= BLOCK_ROCK && currentTileTarget.tile->id <= BLOCK_JADE)
                 {
-                    // @todo span item ramassable ? ou tile ramassable ?
-                    createDropFrom(Player.cible_wX, Player.cible_wY, tile.id);
-
-                    tile.id = BLOCK_UNDERGROUND_AIR;
-                    tile.attr.life = BLOCK_LIFE_NA;
-                    tile.attr.traversable = 1;
-                    tile.attr.opaque = 1;
+                    currentTileTarget.itemColor = RGBConvert(147, 122, 73);
+                }
+                else if (currentTileTarget.tile->id >= BLOCK_TREE1 && currentTileTarget.tile->id <= BLOCK_TREE3)
+                {
+                    currentTileTarget.itemColor = RGBConvert(158, 96, 47);
+                }
+                else if (currentTileTarget.tile->id == BLOCK_GROUND_TOP)
+                {
+                    currentTileTarget.itemColor = RGBConvert(62, 137, 72);
                 }
                 else
                 {
-                    // @todo span herbe
-                    //createDropFrom(Player.cible_wX, Player.cible_wY, tile.id);
-
-                    //On enleve l'herbe si il y en avait
-                    TworldTile brick = getWorldAt(Player.cible_wX, Player.cible_wY-1);
-                    if (brick.id == BLOCK_GRASS1 || brick.id == BLOCK_GRASS2 || brick.id == BLOCK_GRASS3)
-                    {
-                        brick.id = BLOCK_AIR;
-                        brick.attr.life = BLOCK_LIFE_NA;
-                        brick.attr.traversable = 1;
-                        brick.attr.opaque = 0;
-                        setWorldAt(Player.cible_wX, Player.cible_wY-1, brick);
-                    }
-                    tile.id = BLOCK_AIR;
-                    tile.attr.life = BLOCK_LIFE_NA;
-                    tile.attr.traversable = 1;
-                    tile.attr.opaque = 0;
+                    currentTileTarget.itemColor = RGBConvert(217, 160, 102);
                 }
-
-                // @todo : tester le type de tile
-                sndPlayerCanal1.play(AudioSampleRock_break);
-                parts.createExplosion(Player.cible_pX + 8, Player.cible_pY + 8, 12); //@todo colorer avec la couleur de la brique en cours de travail
-
-                setWorldAt(Player.cible_wX, Player.cible_wY, tile);
-                updateHauteurColonne(Player.cible_wX, Player.cible_wY);
-                //update hauteur colonne
+                currentTileTarget.lastHit = millis();
             }
         }
         else
         {
-            //Animation action
+            if (counterActionB >= FRAMES_ACTION_B) //Action (pour le moment minage seulement)
+            {
+                TworldTile *tile = currentTileTarget.tile;
+                currentTileTarget.tile->attr.hit = 0;
+                counterActionB = 0;
+                coolDownActionB = FRAMES_COOLDOWN_B;
+                lastCibleX = lastCibleY = 0;
+                bool bHit = false;
+
+                //Serial.printf("Dig:%d,%d v:%d\n", currentTileTarget.wX, currentTileTarget.wY, tile);
+                if (tile->attr.life != BLOCK_LIFE_NA && Player.pos.YDown < (WORLD_HEIGHT - 1))
+                {
+                    //on teste si on a creusé dans de la pierre solide et on exclue aussi le ground ( @todo : spawn herbe quand meme )
+                    if (tile->id >= BLOCK_ROCK && tile->id <= BLOCK_JADE)
+                    {
+                        bHit = true;
+                        //ROCHER
+                        // @todo span item ramassable ? ou tile ramassable ?
+                        createDropFrom(currentTileTarget.wX, currentTileTarget.wY, tile->id);
+
+                        tile->id = BLOCK_UNDERGROUND_AIR;
+                        tile->attr.life = BLOCK_LIFE_NA;
+                        tile->attr.traversable = 1;
+                        tile->attr.opaque = 1;
+                    }
+                    else if (tile->id >= BLOCK_TREE1 && tile->id <= BLOCK_TREE3)
+                    {
+                        bHit = true;
+                        //On casse tout l'arbre
+                        createDropFrom(currentTileTarget.wX, currentTileTarget.wY, tile->id);
+
+                        tile->id = BLOCK_AIR;
+                        tile->attr.life = BLOCK_LIFE_NA;
+                        tile->attr.traversable = 1;
+                        tile->attr.opaque = 0;
+                    }
+                    else
+                    {
+                        bHit = true;
+
+                        // @todo span herbe
+                        //createDropFrom(currentTileTarget.wX, currentTileTarget.wY, tile.id);
+
+                        //On enleve l'herbe si il y en avait
+                        TworldTile brickUp = getWorldAt(currentTileTarget.wX, currentTileTarget.wY - 1);
+                        if (brickUp.id == BLOCK_GRASS1 || brickUp.id == BLOCK_GRASS2 || brickUp.id == BLOCK_GRASS3)
+                        {
+                            brickUp.id = BLOCK_AIR;
+                            brickUp.attr.life = BLOCK_LIFE_NA;
+                            brickUp.attr.traversable = 1;
+                            brickUp.attr.opaque = 0;
+                            setWorldAt(currentTileTarget.wX, currentTileTarget.wY - 1, brickUp);
+                        }
+                        tile->id = BLOCK_AIR;
+                        tile->attr.life = BLOCK_LIFE_NA;
+                        tile->attr.traversable = 1;
+                        tile->attr.opaque = 0;
+                    }
+                    if (bHit)
+                    {
+                        // @todo : tester le type de tile
+                        sndPlayerCanal1.play(AudioSampleRock_break);
+                        parts.createExplosion(currentTileTarget.pX + 8, currentTileTarget.pY + 8, 12, currentTileTarget.itemColor); //@todo colorer avec la couleur de la brique en cours de travail
+
+                        updateHauteurColonne(currentTileTarget.wX, currentTileTarget.wY);
+                    }
+                }
+            }
         }
     }
     else
@@ -2933,7 +3053,10 @@ void checkPlayerInputs()
             coolDownActionB--;
 
         counterActionB = 0;
-        //Player.cible_wX = Player.cible_wY = 0;
+        if (currentTileTarget.tile != NULL)
+            currentTileTarget.tile->attr.hit = 0;
+
+        //currentTileTarget = {0};
 
         if (just_pressed & ARCADA_BUTTONMASK_A)
         {
@@ -3021,7 +3144,6 @@ void updateGame()
     }
     else
     {
-
         updatePlayer();
 
         updateEnnemies();
@@ -3263,7 +3385,7 @@ bool LoadGame(uint8_t numEmplacement)
                 WORLD[wY][wX].attr.RAW = value16;
             }
         }
-        
+
         data.close();
 
         ret = true;
@@ -3410,8 +3532,8 @@ void loop()
 
     //elapsedTime = millis() - now;
 
-   //if (lastFrameDurationMs > (1000/FPS))
-   // Serial.printf("LFD:%d\n", lastFrameDurationMs);
+    //if (lastFrameDurationMs > (1000/FPS))
+    Serial.printf("LFD:%d\n", lastFrameDurationMs);
 }
 
 void anim_player_idle()
@@ -3700,7 +3822,7 @@ void anim_player_fx_double_jump()
 void displayGame()
 {
     //canvas->fillScreen(0x867D); //84ceef
-    
+
     drawWorld();
 
     //arcada.display->display();

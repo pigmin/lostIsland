@@ -176,25 +176,25 @@ void setupSoundManager()
   // reduce the gain on some channels, so half of the channels
   // are "positioned" to the left, half to the right, but all
   // are heard at least partially on both ears
-  mixerMOD.gain(0, 0.3);
-  mixerMOD.gain(1, 0.3);
-  mixerMOD.gain(2, 0.3);
-  mixerMOD.gain(3, 0.3);
+  mixerMOD.gain(0, 0.2);
+  mixerMOD.gain(1, 0.2);
+  mixerMOD.gain(2, 0.2);
+  mixerMOD.gain(3, 0.2);
 
   mixerFX.gain(0, 1);
   mixerFX.gain(1, 1);
   mixerFX.gain(2, 1);
   mixerFX.gain(3, 1);
 
-  mixerLeft.gain(0, 0.3);
-  mixerLeft.gain(1, 0.3);
-  mixerLeft.gain(2, 0.3);
-  mixerLeft.gain(3, 0.3);
+  mixerLeft.gain(0, 0.5);
+  mixerLeft.gain(1, 0.5);
+  mixerLeft.gain(2, 0.5);
+  mixerLeft.gain(3, 0.5);
 
-  mixerRight.gain(0, 0.3);
-  mixerRight.gain(1, 0.3);
-  mixerRight.gain(2, 0.3);
-  mixerRight.gain(3, 0.3);
+  mixerRight.gain(0, 0.5);
+  mixerRight.gain(1, 0.5);
+  mixerRight.gain(2, 0.5);
+  mixerRight.gain(3, 0.5);
 
   //16 bits par defaut (aucun effet)
 //  bitcrusher1.bits(16);
