@@ -1,4 +1,4 @@
-/* GIMP RGBA C-Source image dump (ground_0A.c) */
+/* GIMP RGB C-Source image dump (ground_0A.c) */
 
 static const struct {
   unsigned int 	 width;

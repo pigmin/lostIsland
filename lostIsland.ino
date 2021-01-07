@@ -586,13 +586,9 @@ void initWorld()
             //Serial.printf("player:%d,%d tile:%d,%d dist:%f\n", playerLightX, playerLightY, px, py,  distPlayer);
             // @todo gerer la non propagassion de la lumiere dans les murs...
             if (distPlayer > 0)
-            {
-                playerLightMask[wY][wX] = (PLAYER_LIGHT_INTENSITY / (distPlayer * distPlayer));
-            }
+                playerLightMask[wY][wX] = (PLAYER_LIGHT_INTENSITY /(distPlayer * distPlayer));
             else
-            {
                 playerLightMask[wY][wX] = PLAYER_LIGHT_INTENSITY;
-            }
         }
     }
 
@@ -600,6 +596,7 @@ void initWorld()
     memset(WORLD, 0, sizeof(WORLD));
     SimplexNoise noiseGen;
 
+    int minProfondeur = 999;
     int maxProfondeur = 0;
     for (int wX = 0; wX < WORLD_WIDTH; wX++)
     {
@@ -608,6 +605,7 @@ void initWorld()
 
         uint8_t rowGround = (WORLD_HEIGHT - 1) - (int(noise * AMPLITUDE_HAUTEUR) + MEDIUM_HAUTEUR);
 
+        minProfondeur = min(minProfondeur, rowGround);
         maxProfondeur = max(maxProfondeur, rowGround);
 
         //On sauvegarde la hauteur sol dans la derniere ligne du world (invisible)
@@ -617,19 +615,13 @@ void initWorld()
 
         for (int wY = 0; wY < WORLD_HEIGHT; wY++)
         {
-            if (wY > (rowGround + 3))
+            //Le ciel
+            if (wY < rowGround)
             {
-                WORLD[wY][wX].id = BLOCK_ROCK;
-                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
-                WORLD[wY][wX].attr.traversable = 0;
-                WORLD[wY][wX].attr.opaque = 1;
-            }
-            else if (wY > rowGround)
-            {
-                WORLD[wY][wX].id = BLOCK_GROUND;
-                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
-                WORLD[wY][wX].attr.traversable = 0;
-                WORLD[wY][wX].attr.opaque = 1;
+                WORLD[wY][wX].id = BLOCK_AIR;
+                WORLD[wY][wX].attr.traversable = 1;
+                WORLD[wY][wX].attr.opaque = 0;
+                WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
             }
             else if (wY == rowGround)
             {
@@ -638,12 +630,19 @@ void initWorld()
                 WORLD[wY][wX].attr.traversable = 0;
                 WORLD[wY][wX].attr.opaque = 1;
             }
-            else
+            else if (wY <= rowGround + 3) //entre surface et sous sol profond
             {
-                WORLD[wY][wX].id = BLOCK_AIR;
-                WORLD[wY][wX].attr.traversable = 1;
-                WORLD[wY][wX].attr.opaque = 0;
-                WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
+                WORLD[wY][wX].id = BLOCK_GROUND;
+                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
+                WORLD[wY][wX].attr.traversable = 0;
+                WORLD[wY][wX].attr.opaque = 1;
+            }
+            else    //sous sol profond
+            {
+                WORLD[wY][wX].id = BLOCK_ROCK;
+                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
+                WORLD[wY][wX].attr.traversable = 0;
+                WORLD[wY][wX].attr.opaque = 1;
             }
         }
     }
@@ -660,7 +659,7 @@ void initWorld()
             //            float noise = noiseGen.fractal(8, (float)16*wX / (float)WORLD_WIDTH, (float)16*wY / (float)WORLD_HEIGHT);
             float noise = SimplexNoise::noise((float)16 * wX / (float)WORLD_WIDTH, (float)16 * wY / (float)WORLD_HEIGHT);
             int16_t densite = int(noise * AMPLITUDE_DENSITE);
-            if (WORLD[wY][wX].id >= BLOCK_GROUND && WORLD[wY][wX].id <= BLOCK_GROUND_ALL)
+            if ( wY <= curProdondeur+3 )
             {
                 if (densite > MAX_DENSITE)
                 {
@@ -674,20 +673,23 @@ void initWorld()
             {
                 if (abs(densite) > MAX_DENSITE || densite == 0)
                 {
-                    WORLD[wY][wX].id = BLOCK_UNDERGROUND_AIR;
-                    WORLD[wY][wX].attr.traversable = 1;
-                    WORLD[wY][wX].attr.opaque = 1;
-                    WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
+                    if (WORLD[wY][wX].id != BLOCK_AIR)
+                    {
+                        WORLD[wY][wX].id = BLOCK_UNDERGROUND_AIR;
+                        WORLD[wY][wX].attr.traversable = 1;
+                        WORLD[wY][wX].attr.opaque = 1;
+                        WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
+                    }
                 }
                 else
                 {
-                    int randSeed = rand() % 100;
                     WORLD[wY][wX].id = BLOCK_ROCK;
                     WORLD[wY][wX].attr.life = BLOCK_ROCK_DENSITY;
                     WORLD[wY][wX].attr.traversable = 0;
                     WORLD[wY][wX].attr.opaque = 1;
                     if (wY >= curProdondeur + 5)
                     {
+                        int randSeed = rand() % 100;
                         if (wY <= curProdondeur + 12)
                         {
                             if (randSeed < 2)
@@ -760,7 +762,7 @@ void initWorld()
                 //Sauvegarde de la hauteur courante et de la hauteur originelle
                 WORLD[HEADER_ROW][wX].id = wY;
                 WORLD[REF_ROW][wX].id = wY;
-
+#if 0
                 WORLD[wY][wX].id = BLOCK_GROUND_TOP;
                 WORLD[wY][wX].attr.traversable = 0;
                 WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
@@ -787,7 +789,7 @@ void initWorld()
                         WORLD[wY - 1][wX].attr.spriteVariation = rand() % 3;
                     }
                 }
-
+#endif
                 break;
             }
         }
@@ -801,7 +803,6 @@ void initWorld()
     {
         int curP = WORLD[REF_ROW][4 + nbW].id;
         WORLD[(curP - 1)][4 + nbW].attr.Level = MAX_WATER_LEVEL;
-        WORLD[(curP - 3)][4 + nbW].attr.Level = MAX_WATER_LEVEL / 3;
     }
 
     //On update en boucle de force pour stabiliser l'eau
@@ -1430,7 +1431,9 @@ void drawTiles()
                         {
                             int delta = (wY - profondeurColonne) + 1;
                             if (delta > 1)
-                                curLight = curLight / delta;
+                                curLight = curLight - (33*delta);
+
+                            curLight = max(curLight, 0);
                         }
 
                         //if (wY <= (Player.pos.worldY + 2))
@@ -1477,11 +1480,33 @@ void drawTiles()
                     }
                     else if (value >= BLOCK_GROUND && value <= BLOCK_GROUND_ALL)
                     {
-                        drawTile(px, py, getGroundBlockData(value), curLight);
+                        drawTileMask(px, py, getGroundBlockData(value), curLight);
                     }
                     else if (value == BLOCK_GRASS)
                     {
-                        //Les tiles avec masking sont dessinées dans drawTilesMasking
+                        if (brick->attr.Level > 0)
+                        {
+                            bool bOnSurface = false;
+                            if (wY > 0)
+                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
+                            
+                            if (brick->attr.spriteVariation == 0)
+                                drawWaterTileMask(px, py, grass1.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                            else if (brick->attr.spriteVariation == 1)
+                                drawWaterTileMask(px, py, grass2.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                            else
+                                drawWaterTileMask(px, py, grass3.pixel_data, curLight, brick->attr.Level, bOnSurface);
+
+                        }
+                        else
+                        {
+                            if (brick->attr.spriteVariation == 0)
+                                drawTileMask(px, py, grass1.pixel_data, curLight);
+                            else if (brick->attr.spriteVariation == 1)
+                                drawTileMask(px, py, grass2.pixel_data, curLight);
+                            else
+                                drawTileMask(px, py, grass3.pixel_data, curLight);
+                        }
                     }
                     else if (value == BLOCK_TREE)
                     {
@@ -1489,7 +1514,7 @@ void drawTiles()
                     }
                     else if (value == BLOCK_ROCK)
                     {
-                        drawTile(px, py, rock_empty.pixel_data, curLight);
+                        drawTileMask(px, py, rock_empty.pixel_data, curLight);
                     }
                     else if (value == BLOCK_CHARBON) //
                     {
@@ -1603,6 +1628,8 @@ void drawTilesMasking()
                             int delta = (wY - profondeurColonne) + 1;
                             if (delta > 1)
                                 curLight = curLight / delta;
+
+                            curLight = max(curLight, 0);
                         }
 
                         //if (wY <= (Player.pos.worldY + 2))
@@ -1620,7 +1647,7 @@ void drawTilesMasking()
 #ifdef DEBUG
                     curLight = MAX_LIGHT_INTENSITY;
 #endif
-                    if (value == BLOCK_GRASS) //
+                 /*   if (value == BLOCK_GRASS) //
                     {                        
                         if (brick->attr.Level > 0)
                         {
@@ -1646,7 +1673,8 @@ void drawTilesMasking()
                                 drawTileMask(px, py, grass3.pixel_data, curLight);
                         }
                     }
-                    else if (value == BLOCK_TREE) //
+                    else */
+                    if (value == BLOCK_TREE) //
                     {
                         int realpx = px;
                         int realpy = py;
@@ -1854,7 +1882,9 @@ void drawWorld()
     //On dessine le background uniquement si on peut le voir, en sous sol on l'ignore, les tiles "background air" etant sans transparence
     if (worldMIN_Y < hauteurMaxBackground)
         drawBackgroundImage(0, 0, background_day.width, background_day.height, background_day.pixel_data);
-
+    else
+        canvas->fillScreen(ARCADA_BLACK);
+    
 //           uint32_t now = micros();
     drawTiles();
 
@@ -2765,7 +2795,7 @@ void updateWorld()
     else
     {
         //Update alternatif (lava ? anims ?)
-        //FoliageUpdate();
+        FoliageUpdate();
     }
     
     //Erosion
@@ -2813,24 +2843,6 @@ void FoliageUpdate()
         TworldTile tileUp = getWorldAt(wX, hauteur - 1);
         int randSeed = random(0, 1000);
 
-        //on transforme les ground en ground top si ils sont en surface
-        if (tile.id == BLOCK_GROUND && tileUp.attr.Level == 0 && randSeed < 25)
-        {
-            tile.id = BLOCK_GROUND_TOP;
-            setWorldAt(wX, hauteur, tile);
-        }
-        //Si groundtop sous l'eau on le met en ground
-        if (tile.id == BLOCK_GROUND_TOP && tileUp.attr.Level > 2 && randSeed < 33)
-        {
-            tile.id = BLOCK_GROUND;
-            setWorldAt(wX, hauteur, tile);
-            //On enleve l'herbe d'au dessus si besoin, on laisse les arbes ??
-            if (tileUp.id == BLOCK_GRASS)
-            {
-                tileUp.id = BLOCK_AIR;
-                setWorldAt(wX, hauteur - 1, tileUp);
-            }
-        }
         //        if (tileUp.id == BLOCK_TREE &&)
     }
 }
@@ -3591,7 +3603,7 @@ void loop()
     //elapsedTime = millis() - now;
 
     //if (lastFrameDurationMs > (1000/FPS))
-    //Serial.printf("LFD:%d\n", lastFrameDurationMs);
+    Serial.printf("LFD:%d\n", lastFrameDurationMs);
 }
 
 void anim_player_idle()
