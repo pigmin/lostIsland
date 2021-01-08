@@ -32,6 +32,12 @@
 #define FALLING_SPEED 1
 #define WALKING_SPEED 2
 #define RUNNING_SPEED 2
+//Nombre de frames ou on considere le player comme encore sur le sol (pour les air jumps)
+#define FRAMES_GROUND_LATENCY   (FPS/6)
+//On se rapelle de la demande de saut pendant x frames (pour sauter meme si on touchait pas encore le sol mais juste apres oui...)
+#define FRAMES_JUMP_LATENCY   (FPS/6)
+//On autorise le double jump apres x frames suivant le jump classique
+#define FRAMES_DOUBLE_JUMP_DETECTION    (FPS/2)
 
 #define MAX_SPEED_X 4
 #define MAX_SPEED_Y 15

@@ -365,12 +365,14 @@ void initPlayer()
 
     Player.bDying = false;
     Player.bJumping = false;
+    Player.jumpCounter = 0;
     Player.bDoubleJumping = false;
     Player.bFalling = false;
     Player.bWalking = false;
     Player.bTouched = false;
     Player.iTouchCountDown = 0;
-    Player.bOnGround = true;
+    Player.bOnGround = false;
+    Player.onGroundCounter = 0;
 
     Player.max_health = 20;
     Player.health = 20;
@@ -1480,7 +1482,7 @@ void drawTiles()
                     }
                     else if (value >= BLOCK_GROUND && value <= BLOCK_GROUND_ALL)
                     {
-                        drawTileMask(px, py, getGroundBlockData(value), curLight);
+                        drawTile(px, py, getGroundBlockData(value), curLight);
                     }
                     else if (value == BLOCK_GRASS)
                     {
@@ -1514,7 +1516,7 @@ void drawTiles()
                     }
                     else if (value == BLOCK_ROCK)
                     {
-                        drawTileMask(px, py, rock_empty.pixel_data, curLight);
+                        drawTile(px, py, rock_empty.pixel_data, curLight);
                     }
                     else if (value == BLOCK_CHARBON) //
                     {
@@ -2362,8 +2364,6 @@ void checkPlayerCollisionsEntities()
 
 void updatePlayer()
 {
-    bool bWasOnGround = Player.bOnGround;
-
     if (Player.bDying)
     {
         jumpPhase += 2;
@@ -2901,7 +2901,7 @@ void checkPlayerCollisionsWorld()
         // +0 +15
         TworldTile tileTL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + PLAYER_Y_BDM);
         TworldTile tileBL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + 15);
-        if ((!tileTL.attr.traversable) || (!tileBL.attr.traversable))
+        if (!tileTL.attr.traversable || !tileBL.attr.traversable)
         {
             Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + (16 - PLAYER_X_BDM);
             Player.pos.speedX = 0;
@@ -2913,16 +2913,16 @@ void checkPlayerCollisionsWorld()
         // +16 +15
         TworldTile tileTR = getWorldAtPix(Player.pos.newX + (16 - PLAYER_X_BDM), Player.pos.pY + PLAYER_Y_BDM);
         TworldTile tileBR = getWorldAtPix(Player.pos.newX + (16 - PLAYER_X_BDM), Player.pos.pY + 15);
-        if ((!tileTR.attr.traversable) || (!tileBR.attr.traversable))
+        if (!tileTR.attr.traversable || !tileBR.attr.traversable)
         {
             Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + PLAYER_X_BDM;
             Player.pos.speedX = 0;
         }
     }
     //Y
-    Player.bOnGround = false;
     Player.bJumping = false;
     Player.bFalling = false;
+    Player.bOnGround = false;
     if (Player.pos.speedY <= 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
@@ -2930,7 +2930,7 @@ void checkPlayerCollisionsWorld()
         // +15 +0
         TworldTile tileTL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.newY + PLAYER_Y_BDM);
         TworldTile tileTR = getWorldAtPix(Player.pos.newX + (15 - PLAYER_X_BDM), Player.pos.newY + PLAYER_Y_BDM);
-        if ((!tileTL.attr.traversable) || (!tileTR.attr.traversable))
+        if (!tileTL.attr.traversable || !tileTR.attr.traversable)
         {
             Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16)) + (16 - PLAYER_Y_BDM); // - PLAYER_Y_BDM ??
             Player.pos.speedY = 0;
@@ -2949,9 +2949,9 @@ void checkPlayerCollisionsWorld()
 
         TworldTile tileBL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.newY + 16);
         TworldTile tileBR = getWorldAtPix(Player.pos.newX + (15 - PLAYER_X_BDM), Player.pos.newY + 16);
-        if ((!tileBL.attr.traversable) || (!tileBR.attr.traversable))
+        if (!tileBL.attr.traversable || !tileBR.attr.traversable)
         {
-            Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16));
+            Player.pos.newY = Player.pos.newY - (Player.pos.newY % 16);
             Player.bOnGround = true;
             Player.bFalling = false;
             //On peut de nouveau realiser un double jump
@@ -2959,6 +2959,13 @@ void checkPlayerCollisionsWorld()
             Player.pos.speedY = 0;
         }
     }
+    if (Player.onGroundCounter > 0)
+        Player.onGroundCounter--;
+
+    if (Player.bOnGround)
+        Player.onGroundCounter = FRAMES_GROUND_LATENCY;
+
+
     Player.bWalking = false;
     if (Player.pos.pX != Player.pos.newX)
     {
@@ -2973,6 +2980,12 @@ void checkPlayerInputs()
     Player.bWantJump = false;
     Player.bWantDoubleJump = false;
     Player.bWantWalk = false;
+
+    if (A_just_pressedCounter > 0)
+        A_just_pressedCounter--;
+    
+    if (Player.jumpCounter > 0)
+        Player.jumpCounter--;
 
     if (just_pressed & ARCADA_BUTTONMASK_SELECT)
     {
@@ -3127,20 +3140,26 @@ void checkPlayerInputs()
             currentTileTarget.tile->attr.hit = 0;
 
         //currentTileTarget = {0};
-
+        
         if (just_pressed & ARCADA_BUTTONMASK_A)
         {
-            if (Player.pos.speedY == 0 && Player.bOnGround)
+            A_just_pressedCounter = FRAMES_JUMP_LATENCY;
+
+            if (Player.onGroundCounter > 0)// && Player.pos.speedY == 0)
             {
+                A_just_pressedCounter = 0;
                 Player.bWantJump = true;
+                Player.jumpCounter = FRAMES_DOUBLE_JUMP_DETECTION;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
                 Player.pos.speedY = -JUMP_SPEED;
                 //Spawn Effect
                 set_double_jump_fx();
             }
-            else if (!Player.bOnGround && !Player.bDoubleJumping && Player.pos.speedY < FALLING_SPEED)
+            else if (!Player.bOnGround && !Player.bDoubleJumping && Player.jumpCounter > 0)
             {
+                Player.jumpCounter = 0;
+                A_just_pressedCounter = 0;
                 // @todo spawn dust double jump
                 Player.bWantDoubleJump = true;
                 sndPlayerCanal1.play(AudioSample__Jump);
@@ -3149,6 +3168,29 @@ void checkPlayerInputs()
                 Player.bDoubleJumping = true;
                 //Spawn Effect
                 set_double_jump_fx(true);
+            }
+        }
+        else
+        {
+            //On a clique il y a peu de temps et on touche le sol...on saute
+            if (A_just_pressedCounter && Player.onGroundCounter > 0)
+            {
+                A_just_pressedCounter = 0;
+                Player.bWantJump = true;
+                Player.jumpCounter = FRAMES_DOUBLE_JUMP_DETECTION;
+                sndPlayerCanal1.play(AudioSample__Jump);
+                //Thrust
+                Player.pos.speedY = -JUMP_SPEED;
+                //Spawn Effect
+                set_double_jump_fx();
+            }
+            else
+            {            
+                //Si on relache le bouton on saute moins haut..a tester
+                if ((just_released & ARCADA_BUTTONMASK_A) && Player.pos.speedY < 0)
+                {
+                    Player.pos.speedY = Player.pos.speedY >> 1;
+                }
             }
         }
 
@@ -3566,6 +3608,7 @@ void readInputs()
 {
     pressed_buttons = arcada.readButtons();
     just_pressed = arcada.justPressedButtons();
+    just_released = arcada.justReleasedButtons();
 }
 
 void loop()

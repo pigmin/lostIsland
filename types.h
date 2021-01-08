@@ -58,9 +58,11 @@ typedef struct TPlayer
 
   bool bDying;
   bool bJumping;
+  uint8_t jumpCounter;
   bool bFalling;
   bool bWalking;
   bool bOnGround;
+  uint8_t onGroundCounter;
   bool bTouched;
   bool bDoubleJumping;
 
@@ -143,7 +145,7 @@ typedef struct {
 
           //1 si en cours de minage, pour effets divers
           uint8_t hit:1;
-          //permet de changer l'apparence en gardant le meme type (arbres par exemple)
+          //permet de changer l'apparence en gardant le meme type (arbres)
           uint8_t spriteVariation:2;
           uint8_t __spare:1;
         };
