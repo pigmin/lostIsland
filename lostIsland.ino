@@ -372,6 +372,7 @@ void initPlayer()
     Player.bTouched = false;
     Player.iTouchCountDown = 0;
     Player.bOnGround = false;
+    Player.bLanding = false;
     Player.onGroundCounter = 0;
 
     Player.max_health = 20;
@@ -479,15 +480,15 @@ void set_dying()
 
 void set_double_jump_fx(bool bForced = false)
 {
-    if (Player.FX.stateAnim != FX_DOUBLE_JUMP)
+    if (Player.FX.stateAnim != FX_DOUBLE_JUMP || bForced)
     {
         Player.FX.stateAnim = FX_DOUBLE_JUMP;
         Player.FX.anim_frame = 0;
         //on le met sur le framerate final pour quil apparaissent de suite
         Player.FX.current_framerate = FX_FRAMERATE_DOUBLE_JUMP;
         Player.FX.direction = Player.pos.direction;
-        //        Player.FX.speedX = 0;
-        //        Player.FX.speedY = 0;
+        Player.FX.speedY = 1;
+        Player.FX.speedX = 1;        
         Player.FX.pX = Player.pos.pX;
         Player.FX.pY = Player.pos.pY;
     }
@@ -501,10 +502,10 @@ void set_dust_fx(void)
         Player.FX.anim_frame = 0;
         Player.FX.current_framerate = 0;
         Player.FX.direction = Player.pos.direction;
-        Player.FX.speedY = -2;
-        Player.FX.speedX = 0;
-        Player.FX.pX = Player.pos.pX + 8;
-        Player.FX.pY = Player.pos.pY + 15;
+        Player.FX.speedY = 1;
+        Player.FX.speedX = 2;
+        Player.FX.pX = (Player.pos.pX + 8);
+        Player.FX.pY = (Player.pos.pY + 17);
     }
 }
 
@@ -1078,6 +1079,8 @@ void drawPlayer()
         anim_player_idle();
         break;
     }
+
+    //En plus de l'anim prinipale il peut y avoir des anims supp (effets)
     switch (Player.FX.stateAnim)
     {
     case FX_NONE:
@@ -1131,7 +1134,7 @@ void killItem(Titem *currentItem, int px, int py)
 {
     currentItem->bIsAlive = 4;
 
-    //parts.createExplosion(px - cameraX, py - cameraY, 16);
+    //parts.createExplosion(px, py, 16);
 }
 
 void drawItem(Titem *currentItem)
@@ -1153,8 +1156,8 @@ void drawItem(Titem *currentItem)
         currentItem->bIsAlive -= 4;
     }
 
-    int px = currentItem->x - worldOffset_pX;
-    int py = currentItem->y - worldOffset_pY;
+    int px = currentItem->x - cameraX;
+    int py = currentItem->y - cameraY;
 
     /*
         /*    if (currentItem->iSpawning > 0)
@@ -1225,8 +1228,8 @@ void killEnnemy(Tennemy *currentEnnemy, int px, int py)
 {
     currentEnnemy->bIsAlive = 64;
 
-    px -= worldOffset_pX;
-    py -= worldOffset_pY;
+    //px -= cameraX;
+    //py -= cameraY;
 
     switch (currentEnnemy->type)
     {
@@ -1263,8 +1266,8 @@ void drawEnnemy(Tennemy *currentEnnemy)
         currentEnnemy->bIsAlive -= 4;
     }
 
-    int px = currentEnnemy->x - worldOffset_pX;
-    int py = currentEnnemy->y - worldOffset_pY;
+    int px = currentEnnemy->x - cameraX;
+    int py = currentEnnemy->y - cameraY;
     //Recentrage
     //px -= 4;
     if (px < ARCADA_TFT_WIDTH && px > -16 && py < ARCADA_TFT_HEIGHT && py > -16)
@@ -1705,8 +1708,8 @@ void drawParticles()
     for (i = 0; i < parts.getActiveParticles(); i++)
     {
         int x, y, velX, velY;
-        x = parts.particles[i].x;
-        y = parts.particles[i].y;
+        x = parts.particles[i].x - cameraX;
+        y = parts.particles[i].y - cameraY;
         /*  velX = parts.particles[i].velX;
     velY = parts.particles[i].velY;
     
@@ -1721,10 +1724,7 @@ void drawParticles()
       velY--;
     }
 */
-
-        if ((x < 0) || (x >= SCREEN_WIDTH))
-            continue;
-        if ((x < 0) || (x >= SCREEN_WIDTH))
+        if (x < 0 || x >= SCREEN_WIDTH || y < 0 || y >= SCREEN_HEIGHT)
             continue;
 
         int w = parts.particles[i].w;
@@ -1782,8 +1782,8 @@ void debugInfos()
             if ((currentEnnemy->worldX >= worldMIN_X - 1) && (currentEnnemy->worldX <= worldMAX_X + 1) && (currentEnnemy->worldY >= worldMIN_Y - 1) && (currentEnnemy->worldY <= worldMAX_Y + 1))
             {
 
-                int px = currentEnnemy->x - worldOffset_pX;
-                int py = currentEnnemy->y - worldOffset_pY;
+                int px = currentEnnemy->x - cameraX;
+                int py = currentEnnemy->y - cameraY;
 
                 canvas->drawRect(px, py, 16, 16, ARCADA_RED);
             }
@@ -1796,7 +1796,7 @@ void drawEffects()
     // @todo : pas vraiment ici que ce devrait etre fait...
     if (counterActionB > 0)
     {
-        if (currentTileTarget.tile->id != BLOCK_AIR && currentTileTarget.tile->id != BLOCK_UNDERGROUND_AIR && currentTileTarget.pX > -16 && currentTileTarget.pX < ARCADA_TFT_WIDTH && currentTileTarget.pY > -16 && currentTileTarget.pY < ARCADA_TFT_HEIGHT)
+        if (currentTileTarget.tile->id != BLOCK_AIR && currentTileTarget.tile->id != BLOCK_UNDERGROUND_AIR)
         {
             //Test action pour le sprite, pour l'instant la pioche
             // drawSprite(currentTileTarget.pX, currentTileTarget.pY, pioche.width, pioche.height, pioche.pixel_data, Player.pos.direction);
@@ -1814,9 +1814,8 @@ void drawEffects()
         itemShakeAmount--;
 
     if (cameraShakeAmount > 0)
-    {
         cameraShakeAmount--;
-    }
+
 }
 
 void drawHud()
@@ -2144,14 +2143,15 @@ void calculatePlayerCoords()
 
 void calculateWorldCoordinates()
 {
-    cameraX = Player.pos.pX - (ARCADA_TFT_WIDTH / 2);
+    //cameraX et cameraY sont la position en world pixels du coin en haut a gauche, qui suit le player
+    cameraX = Player.pos.pX - HALF_SCREEN_WIDTH;
     if (cameraShakeAmount > 0)
         cameraX += random(-cameraShakeAmount, cameraShakeAmount);        
 
     cameraX = max(cameraX, 0);
     cameraX = min(cameraX, ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH);
 
-    cameraY = Player.pos.pY - (ARCADA_TFT_HEIGHT / 2);
+    cameraY = Player.pos.pY - HALF_SCREEN_HEIGHT;
     if (cameraShakeAmount > 0)
         cameraY += random(-cameraShakeAmount, cameraShakeAmount);        
 
@@ -2171,10 +2171,6 @@ void calculateWorldCoordinates()
     worldMIN_Y = max(worldMIN_Y, 0);
     worldMAX_Y = worldMIN_Y + (ARCADA_TFT_HEIGHT / 16);
     worldMAX_Y = min(worldMAX_Y + 1, (WORLD_HEIGHT - 1));
-
-    //Utile pour dessiner les sprites a l'ecran
-    worldOffset_pX = (worldMIN_X * 16) + currentOffset_X;
-    worldOffset_pY = (worldMIN_Y * 16) + currentOffset_Y;
 }
 
 bool playerPickupItem(Titem *currentItem)
@@ -2458,12 +2454,20 @@ void computePlayerAnimations()
         {
             if (Player.bOnGround)
             {
+                if (Player.bLanding)
+                {
+                    //Anim aterrissage ?
+                    //set_big_grounding(); ?
+                    //Spawn Effect
+                   // set_double_jump_fx(true);
+                    set_dust_fx();
+                }
                 if (Player.bWantWalk) // demannde de deplacement)
                 {
                     if (Player.bWalking) //On a bougé
                     {
                         set_walking();
-                        set_dust_fx();
+                        //set_dust_fx();
                     }
                     else // @todo push
                         set_idle();
@@ -2852,7 +2856,7 @@ void updatePlayerVelocities()
     //Gravity
     Player.pos.speedY = Player.pos.speedY + FALLING_SPEED;
 
-    //Frotements
+    //Frotements, a revoir
     if (Player.bOnGround)
     {
         if (Player.pos.speedX > 0)
@@ -2894,6 +2898,7 @@ void updatePlayerPosition()
 
 void checkPlayerCollisionsWorld()
 {
+    bool bWasOnGround = Player.bOnGround;
     //X
     if (Player.pos.speedX <= 0)
     {
@@ -2923,6 +2928,7 @@ void checkPlayerCollisionsWorld()
     Player.bJumping = false;
     Player.bFalling = false;
     Player.bOnGround = false;
+    Player.bLanding = false;
     if (Player.pos.speedY <= 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
@@ -2954,6 +2960,10 @@ void checkPlayerCollisionsWorld()
             Player.pos.newY = Player.pos.newY - (Player.pos.newY % 16);
             Player.bOnGround = true;
             Player.bFalling = false;
+            //Si la vitesse etait importante on vient d'atterir, spawn effect
+            if (!bWasOnGround && Player.pos.speedY >= SPEED_Y_LANDING)
+                Player.bLanding = true;            
+            
             //On peut de nouveau realiser un double jump
             Player.bDoubleJumping = false;
             Player.pos.speedY = 0;
@@ -3035,8 +3045,8 @@ void checkPlayerInputs()
             if (currentTileTarget.wX != lastCibleX || currentTileTarget.wY != lastCibleY)
             {
                 counterActionB = 0;
-                currentTileTarget.pX = ((currentTileTarget.wX - worldMIN_X) * 16) - currentOffset_X;
-                currentTileTarget.pY = ((currentTileTarget.wY - worldMIN_Y) * 16) - currentOffset_Y;
+                currentTileTarget.pX = currentTileTarget.wX * 16;
+                currentTileTarget.pY = currentTileTarget.wY * 16;
                 currentTileTarget.tile = &WORLD[currentTileTarget.wY][currentTileTarget.wX];
                 currentTileTarget.currentLife = currentTileTarget.tile->attr.life * TILE_LIFE_PRECISION;
                 if (currentTileTarget.tile->id >= BLOCK_ROCK && currentTileTarget.tile->id <= BLOCK_JADE)
@@ -3267,7 +3277,7 @@ void updateGame()
     }
 
     //Ps
-    parts.moveParticles();
+    parts.moveParticles(cameraX, cameraY);
 }
 
 void initMenu()
@@ -3840,7 +3850,7 @@ void anim_player_wining()
         Player.anim_frame++;
         Player.current_framerate = 0;
         if (random(5) == 0)
-            parts.createExplosion(random(10, SCREEN_WIDTH - 10), 10 + (rand() % 2 * SCREEN_HEIGHT / 3), 100 + rand() % 50, random(65535));
+            parts.createExplosion(random(10, SCREEN_WIDTH - 10) + cameraX, 10 + (rand() % 2 * SCREEN_HEIGHT / 3) + cameraY, 100 + rand() % 50, random(65535));
     }
     Player.current_framerate++;
 
@@ -3888,10 +3898,7 @@ void anim_player_fx_dust()
     {
     case FX_FRAME_DUST_1:
         //Dust
-        if (Player.FX.direction > 0)
-            parts.createDust(Player.FX.pX - cameraX, Player.FX.pY - cameraY, 5, Player.FX.speedX, Player.FX.speedY, random(FX_FRAMERATE_DUST + 5, FX_FRAMERATE_DUST << 1));
-        else
-            parts.createDust(Player.FX.pX - cameraX, Player.FX.pY - cameraY, 5, Player.FX.speedX, Player.FX.speedY, random(FX_FRAMERATE_DUST + 5, FX_FRAMERATE_DUST << 1));
+        parts.createDust(Player.FX.pX, Player.FX.pY, 6, Player.FX.speedX, Player.FX.speedY, FX_FRAMERATE_DUST);
         break;
     }
 }

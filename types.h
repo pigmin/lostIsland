@@ -62,6 +62,7 @@ typedef struct TPlayer
   bool bFalling;
   bool bWalking;
   bool bOnGround;
+  bool bLanding; //On vient de tomber a pleine vitesse de falling
   uint8_t onGroundCounter;
   bool bTouched;
   bool bDoubleJumping;

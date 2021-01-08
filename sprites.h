@@ -86,7 +86,7 @@ const int FX_FRAMERATE_DOUBLE_JUMP = 2;
 
 
 #define FX_FRAME_DUST_1  0
-const int FX_FRAMERATE_DUST = 4;
+const int FX_FRAMERATE_DUST = 5;
 
 
 

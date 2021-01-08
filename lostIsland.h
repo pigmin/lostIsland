@@ -68,9 +68,6 @@ int worldMIN_Y = 0;
 int worldMAX_Y = 0;
 int currentOffset_Y = 0;
 
-int worldOffset_pX = 0;
-int worldOffset_pY = 0;
-
 int counterActionB = 0;
 int coolDownActionB = 0;
 

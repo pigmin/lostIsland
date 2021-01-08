@@ -13,8 +13,14 @@
 #define FRAMES_ACTION_B int(2000 / (1000 / FPS))
 #define FRAMES_COOLDOWN_B int(1000 / (1000 / FPS))
 
+#define HALF_SCREEN_WIDTH (ARCADA_TFT_WIDTH>>1)
+#define HALF_SCREEN_HEIGHT (ARCADA_TFT_HEIGHT>>1)
+
 #define WORLD_WIDTH 128
 #define WORLD_HEIGHT 96
+
+#define WORLD_WIDTH_PX (WORLD_WIDTH*16)
+#define WORLD_HEIGHT_PX (WORLD_HEIGHT*16)
 
 #define AMPLITUDE_HAUTEUR 8
 #define MEDIUM_HAUTEUR 80
@@ -38,6 +44,9 @@
 #define FRAMES_JUMP_LATENCY   (FPS/6)
 //On autorise le double jump apres x frames suivant le jump classique
 #define FRAMES_DOUBLE_JUMP_DETECTION    (FPS/2)
+
+//Au dela de cette vitesse de chute on fera de la poussiere au sol
+#define SPEED_Y_LANDING   8
 
 #define MAX_SPEED_X 4
 #define MAX_SPEED_Y 15

@@ -38,7 +38,7 @@ class Particles {
     public:
         Particles();
         ~Particles();
-        void moveParticles();
+        void moveParticles(int cameraX = 0, int cameraY = 0);
         void createExplosion(int x, int y, int num_parts, uint16_t color = 0xFFFFFF, int life = -1);
         void createBodyExplosion(int x, int y, int num_parts, uint16_t color = 0xFFFFFF, int life = -1);
 

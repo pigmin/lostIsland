@@ -6,7 +6,7 @@
  *      
  */
 
-
+#include "defines.h"
 #include "Particle.h"
 #include <stdlib.h>
 #include <WMath.h>
@@ -38,7 +38,7 @@ void Particles::clearParticles() {
 }
 
 // updates the posisitions of all the particles with their velocities
-void Particles::moveParticles()
+void Particles::moveParticles(int cameraX, int cameraY)
 {
     int i;
     
@@ -74,6 +74,8 @@ void Particles::moveParticles()
             i--; 
         }
         else {
+            int px = particles[i].x - cameraX;
+            int py = particles[i].y - cameraY;
             // and delete stopped particles from the list.
             // perhaps I should move this to up about 15 lines, so that stopped
             //  pixels can be deleted from the sketch.
@@ -85,7 +87,7 @@ void Particles::moveParticles()
                 // of the list, so we have to take a step back 
                 i--; 
             }
-            else if ((particles[i].x < 0) || (particles[i].x > SCREEN_WIDTH) || (particles[i].y > SCREEN_HEIGHT))
+            else if ( px < 0 || px > SCREEN_WIDTH || py > SCREEN_HEIGHT )
             {
                 delParticle(i);
                 
@@ -153,13 +155,13 @@ void Particles::createDust(int x, int y, int num_parts, int xspeed, int yspeed, 
     for (i = 0; i < num_parts; i++)
     {
         particle.w = random(2,5);
-        particle.x = x + random(-4,4);
+        particle.x = x + random(-8,8);
         particle.y = y - random(particle.w, particle.w + 2);
         particle.h = particle.w;
         particle.life = life;
         particle.weight = 0;
-        particle.velX = xspeed;
-        particle.velY = yspeed;
+        particle.velX = xspeed * ( (rand() % 6) - 3 );
+        particle.velY = yspeed*random(0,2);
         uint8_t bright = random(200,255);
         particle.color = RGBConvert(bright, bright, bright);
         
