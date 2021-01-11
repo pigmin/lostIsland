@@ -99,12 +99,12 @@ uint8_t A_just_pressedCounter = 0;
 int SCORE = 0;
 bool bWin = false;
 
-int cameraX = 0;
-int cameraY = 0;
+int16_t cameraX = 0;
+int16_t cameraY = 0;
 
-int currentX_back = 0;
+int16_t currentX_back = 0;
 
-int jumpPhase = 0;
+int16_t jumpPhase = 0;
 TworldTile brique_UP = {0};
 TworldTile brique_DOWN = {0};
 TworldTile brique_DOWN_FRONT = {0};
@@ -116,24 +116,24 @@ struct {
     int16_t     currentLife;
     uint32_t    lastHit;
     uint16_t    itemColor;
-    int         wX, wY;
-    int         pX, pY;    
+    int16_t         wX, wY;
+    int16_t         pX, pY;    
 } currentTileTarget = {0};
 
-int count_player_die = 0;
-int count_player_win = 0;
+int16_t count_player_die = 0;
+int16_t count_player_win = 0;
 
 int16_t hauteurMaxBackground = 0;
 
 unsigned long prevDisplay = 0; // when the digital clock was displayed
 
-void createDropFrom(int wX, int wY, uint8_t type);
+void createDropFrom(int16_t wX, int16_t wY, uint8_t type);
 void killItem(Titem *currentItem);
 void drawItems();
 void drawItem(Titem *currentItem);
 void drawHud();
 
-void killEnnemy(Tennemy *currentEnnemy, int px, int py);
+void killEnnemy(Tennemy *currentEnnemy, int16_t px, int16_t py);
 void drawEnnemy(Tennemy *currentEnnemy);
 void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy);
 void updateEnnemyIA(Tennemy *currentEnnemy);
@@ -142,8 +142,8 @@ void drawEnnemies();
 void drawTiles();
 void drawParticles();
 void drawWorld();
-void pixelToWorld(int *pX, int *pY);
-bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y);
+void pixelToWorld(int16_t *pX, int16_t *pY);
+bool checkCollisionTo(int16_t origin_x, int16_t origin_y, int16_t dest_x, int16_t dest_y);
 void checkPlayerCollisionsEntities();
 void updatePlayer();
 void updateEnnemies();

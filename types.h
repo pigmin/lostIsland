@@ -45,6 +45,7 @@ typedef struct TPlayer
     uint8_t current_framerate;
     uint8_t stateAnim;
     int8_t direction;
+    uint8_t    waterLevel;
     int     pX;
     int     pY;
     int     speedX;
@@ -61,6 +62,7 @@ typedef struct TPlayer
   uint8_t jumpCounter;
   bool bFalling;
   bool bWalking;
+  uint8_t waterLevel;
   bool bOnGround;
   bool bLanding; //On vient de tomber a pleine vitesse de falling
   uint8_t onGroundCounter;

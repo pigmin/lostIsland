@@ -61,7 +61,7 @@
    const int PLAYER_FRAMERATE_FALLING = 1;
    const int PLAYER_FRAMERATE_WALK = 2;
    const int PLAYER_FRAMERATE_JUMP = 2;
-   const int PLAYER_FRAMERATE_ACTION = 5;
+   const int PLAYER_FRAMERATE_ACTION = 3;
    const int PLAYER_FRAMERATE_DIE = 1;
    const int PLAYER_FRAMERATE_TOUCH = 2;
    const int PLAYER_FRAMERATE_GROW = 2;
@@ -86,7 +86,11 @@ const int FX_FRAMERATE_DOUBLE_JUMP = 2;
 
 
 #define FX_FRAME_DUST_1  0
-const int FX_FRAMERATE_DUST = 5;
+#define FX_FRAME_DUST_2  1
+#define FX_FRAME_DUST_3  2
+#define FX_FRAME_DUST_4  3
+#define FX_FRAME_DUST_5  4
+const int FX_FRAMERATE_DUST = 1;
 
 
 

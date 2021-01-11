@@ -25,13 +25,14 @@ class Particle {
     public:
         int x;
         int y;
-        int w;
-        int h;
-        int weight;
+        uint8_t w;
+        uint8_t h;
+        int8_t weight;
         float velX;
         float velY;
-        int color;
-        int life;
+        uint16_t color;
+        uint16_t color2;
+        int16_t life;
 };
 
 class Particles {
@@ -39,10 +40,11 @@ class Particles {
         Particles();
         ~Particles();
         void moveParticles(int cameraX = 0, int cameraY = 0);
-        void createExplosion(int x, int y, int num_parts, uint16_t color = 0xFFFFFF, int life = -1);
-        void createBodyExplosion(int x, int y, int num_parts, uint16_t color = 0xFFFFFF, int life = -1);
+        void createExplosion(int x, int y, int num_parts = 8, int xspeed = 1, int yspeed = 1, uint16_t color = 0xFFFF, uint16_t color2 = 0xFFFF, int life = -1);
+        void createDirectionalExplosion(int x, int y, int num_parts = 8, uint8_t size = 1, uint8_t direction = 0xFF, uint16_t color = 0xFFFF, uint16_t color2 = 0xFFFF, int life = -1);
+        void createBodyExplosion(int x, int y, int num_parts = 8, uint16_t color = 0xFFFF, uint16_t color2 = 0xFFFF, int life = -1);
 
-        void createDust(int x, int y, int num_parts, int xspeed, int yspeed, int life = -1);
+        void createLandingDust(int x, int y, int num_parts = 8, int xspeed = 1, int yspeed = 1, int life = -1);
         int getActiveParticles();
         void clearParticles();
         Particle particles[MAX_PARTICLES];

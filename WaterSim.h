@@ -10,10 +10,13 @@
 #define Direction_Bottom 1
 #define Direction_Left 2
 #define Direction_Right 4
-#define Direction_Bottom_Left Direction_Bottom | Direction_Left
-#define Direction_Bottom_Right Direction_Bottom | Direction_Right
-#define Direction_RightLeft Direction_Left | Direction_Right
-#define Direction_All Direction_Left | Direction_Right | Direction_Bottom
+#define Direction_Up 8  //Inutile pour l'eau ?
+#define Direction_Bottom_Left (Direction_Bottom | Direction_Left)
+#define Direction_Bottom_Right (Direction_Bottom | Direction_Right)
+#define Direction_RightLeft (Direction_Left | Direction_Right)
+#define Direction_Flow (Direction_Left | Direction_Right | Direction_Bottom)
+#define Direction_All (Direction_Flow | Direction_Up)
+
 
 void WATER_UpdateNextCell();
 
