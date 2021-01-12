@@ -171,7 +171,7 @@ void setupSoundManager()
   // Audio connections require memory to work.
   // The memory usage code indicates that 10 is the maximum
   // so give it 12 just to be sure.
-  AudioMemory(8);
+  AudioMemory(6);
  
   // reduce the gain on some channels, so half of the channels
   // are "positioned" to the left, half to the right, but all

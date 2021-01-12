@@ -31,10 +31,10 @@ void WATER_UpdateFluidCell2(int x, int y)
 
     cell = &WORLD[y][x];
     // if tile type is not == water return or if the no calculate flag is set
-    if (!cell->attr.traversable)
+    if (!cell->traversable)
         return;
     // if there is no fluid in this cell return
-    if (cell->attr.Level == 0)
+    if (cell->Level == 0)
         return;
 
     // get cell beneath this one
@@ -43,7 +43,7 @@ void WATER_UpdateFluidCell2(int x, int y)
         bottomCell = &WORLD[y + 1][x];
         // for this cell to be considered it must...
         //  be of type Air, not be full of fluid, and have less fluid then the cell we are flowing
-        if (bottomCell->attr.traversable && bottomCell->attr.Level < MAX_WATER_LEVEL)
+        if (bottomCell->traversable && bottomCell->Level < MAX_WATER_LEVEL)
         {
             matrix |= Direction_Bottom;
         }
@@ -55,7 +55,7 @@ void WATER_UpdateFluidCell2(int x, int y)
         leftCell = &WORLD[y][x - 1];
         // for this cell to be considered it must...
         //  be of type Air, not be full of fluid, and have less fluid then the cell we are flowing
-        if (leftCell->attr.traversable && leftCell->attr.Level < MAX_WATER_LEVEL && leftCell->attr.Level < cell->attr.Level)
+        if (leftCell->traversable && leftCell->Level < MAX_WATER_LEVEL && leftCell->Level < cell->Level)
         {
             matrix |= Direction_Left;
         }
@@ -67,7 +67,7 @@ void WATER_UpdateFluidCell2(int x, int y)
         rightCell = &WORLD[y][x + 1];
         // for this cell to be considered it must...
         //  be of type Air, not be full of fluid, and have less fluid then the cell we are flowing
-        if (rightCell->attr.traversable && rightCell->attr.Level < MAX_WATER_LEVEL && rightCell->attr.Level < cell->attr.Level)
+        if (rightCell->traversable && rightCell->Level < MAX_WATER_LEVEL && rightCell->Level < cell->Level)
         {
             matrix |= Direction_Right;
         }
@@ -77,7 +77,7 @@ void WATER_UpdateFluidCell2(int x, int y)
     switch (matrix)
     {
     case Direction_Bottom:
-        cell->attr.Level = FlowBottom(cell, bottomCell);
+        cell->Level = FlowBottom(cell, bottomCell);
         break;
 
     case Direction_Bottom_Left:
@@ -120,80 +120,80 @@ void WATER_UpdateFluidCell2(int x, int y)
 
 void FlowRight(TworldTile *cell, TworldTile *rightCell)
 {
-    int amountToSpread = (rightCell->attr.Level + cell->attr.Level) / 2;
-    int remainder = (rightCell->attr.Level + cell->attr.Level) % 2;
+    int amountToSpread = (rightCell->Level + cell->Level) / 2;
+    int remainder = (rightCell->Level + cell->Level) % 2;
 
-    rightCell->attr.Level = amountToSpread + remainder;
-    rightCell->attr.Direction = Direction_Right;
-    cell->attr.Level = amountToSpread;
-    if (cell->attr.Direction == Direction_Bottom)
-        cell->attr.Direction = Direction_Bottom_Right;
+    rightCell->Level = amountToSpread + remainder;
+    rightCell->Direction = Direction_Right;
+    cell->Level = amountToSpread;
+    if (cell->Direction == Direction_Bottom)
+        cell->Direction = Direction_Bottom_Right;
     else
-        cell->attr.Direction = Direction_Right;
+        cell->Direction = Direction_Right;
 }
 
 void FlowLeft(TworldTile *cell, TworldTile *leftCell)
 {
-    int amountToSpread = (leftCell->attr.Level + cell->attr.Level) / 2;
-    int remainder = (leftCell->attr.Level + cell->attr.Level) % 2;
+    int amountToSpread = (leftCell->Level + cell->Level) / 2;
+    int remainder = (leftCell->Level + cell->Level) % 2;
 
-    leftCell->attr.Level = amountToSpread + remainder;
-    leftCell->attr.Direction = Direction_Left;
-    cell->attr.Level = amountToSpread;
-    if (cell->attr.Direction == Direction_Bottom)
-        cell->attr.Direction = Direction_Bottom_Left;
+    leftCell->Level = amountToSpread + remainder;
+    leftCell->Direction = Direction_Left;
+    cell->Level = amountToSpread;
+    if (cell->Direction == Direction_Bottom)
+        cell->Direction = Direction_Bottom_Left;
     else
-        cell->attr.Direction = Direction_Left;
+        cell->Direction = Direction_Left;
 }
 
 void FlowLeftRight(TworldTile *cell, TworldTile *leftCell, TworldTile *rightCell)
 {
-    int amountToSpread = (leftCell->attr.Level + rightCell->attr.Level + cell->attr.Level) / 3;
-    int remainder = (leftCell->attr.Level + rightCell->attr.Level + cell->attr.Level) % 3;
+    int amountToSpread = (leftCell->Level + rightCell->Level + cell->Level) / 3;
+    int remainder = (leftCell->Level + rightCell->Level + cell->Level) % 3;
     // if we have a remainder...
     if (remainder > 0)
     {
         //
-        if (cell->attr.Direction == Direction_Left)
+        if (cell->Direction == Direction_Left)
         {
-            leftCell->attr.Level = amountToSpread + remainder;
-            leftCell->attr.Direction = Direction_Left;
-            rightCell->attr.Level = amountToSpread;
+            leftCell->Level = amountToSpread + remainder;
+            leftCell->Direction = Direction_Left;
+            rightCell->Level = amountToSpread;
         }
         else
         {
-            leftCell->attr.Level = amountToSpread;
-            rightCell->attr.Level = amountToSpread + remainder;
-            rightCell->attr.Direction = Direction_Right;
+            leftCell->Level = amountToSpread;
+            rightCell->Level = amountToSpread + remainder;
+            rightCell->Direction = Direction_Right;
         }
     }
     else
     {
         // otherwise it's an even split
-        leftCell->attr.Level = amountToSpread;
-        leftCell->attr.Direction = Direction_None;
-        rightCell->attr.Level = amountToSpread;
-        rightCell->attr.Direction = Direction_None;
+        leftCell->Level = amountToSpread;
+        leftCell->Direction = Direction_None;
+        rightCell->Level = amountToSpread;
+        rightCell->Direction = Direction_None;
     }
 
-    cell->attr.Level = amountToSpread;
-    cell->attr.Direction = Direction_None;
+    cell->Level = amountToSpread;
+    cell->Direction = Direction_None;
 }
 
 int FlowBottom(TworldTile *cell, TworldTile *bottomCell)
 {
     // check to see how much fluid can fall down
-    int spaceAvailable = MAX_WATER_LEVEL - bottomCell->attr.Level;
+    int spaceAvailable = MAX_WATER_LEVEL - bottomCell->Level;
     int amountToMove = spaceAvailable;
-    if (amountToMove > cell->attr.Level)
-        amountToMove = cell->attr.Level;
+    if (amountToMove > cell->Level)
+        amountToMove = cell->Level;
 
     // move all fluid that can be moved
-    bottomCell->attr.Level += amountToMove;
-    bottomCell->attr.Direction = Direction_None;
-    cell->attr.Level -= amountToMove;
-    if (cell->attr.Level > 0)
-        cell->attr.Direction = Direction_Bottom;
+    bottomCell->Level += amountToMove;
+    bottomCell->Direction = Direction_None;
+    cell->Level -= amountToMove;
+    if (cell->Level > 0)
+        cell->Direction = Direction_Bottom;
 
-    return cell->attr.Level;
+    return cell->Level;
 }

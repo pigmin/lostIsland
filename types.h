@@ -68,6 +68,9 @@ typedef struct TPlayer
   uint8_t onGroundCounter;
   bool bTouched;
   bool bDoubleJumping;
+  bool bSplashIn;
+  bool bSplashOut;
+  bool bUnderWater;
 
   bool bWantWalk;
   bool bWantJump;
@@ -132,28 +135,32 @@ typedef struct Enemy
 //On multiplie la life par x pour plus de precision lors du minage
 #define TILE_LIFE_PRECISION 10
 
+
+      
 typedef struct {
-      uint8_t id;
-      union {
-        struct {
-          uint8_t traversable:1;
-          uint8_t opaque:1;
-          //uint8_t underground:1; //pour le moment on stocke le underground par rapport a la hauteur originelle..a voir..
-          //uint8_t animated:1;
-          uint8_t life:4;
+        uint8_t id;
 
-          //Water simu
-          uint8_t Direction:2;
-          uint8_t Level:3;
+        uint8_t traversable:1;
+        uint8_t opaque:1;
+        //uint8_t underground:1; //pour le moment on stocke le underground par rapport a la hauteur originelle..a voir..
+        //uint8_t animated:1;
+        uint8_t life:4;
 
-          //1 si en cours de minage, pour effets divers
-          uint8_t hit:1;
-          //permet de changer l'apparence en gardant le meme type (arbres)
-          uint8_t spriteVariation:2;
-          uint8_t __spare:1;
-        };
-        uint16_t RAW;
-      } attr;
+        //Water simu
+        uint8_t Direction:2;
+        uint8_t Level:3;
+
+        //1 si en cours de minage, pour effets divers
+        uint8_t hit:1;
+        //permet de changer l'apparence en gardant le meme type (arbres)
+        uint8_t spriteVariation:2;
+
+        uint8_t contour:4;
+
+        uint8_t __spare:4;
+
+      //AU TOTAL ON PEDS DEUX BITS....apres l'alignement nous fait perdre 1 byte...
+
 } TworldTile;
 
 

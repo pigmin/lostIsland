@@ -207,7 +207,7 @@ void updateHauteurColonne(int16_t x, int16_t y)
     int16_t newH = 0;
     for (int16_t wY = 0; wY < WORLD_HEIGHT; wY++)
     {
-        if (!WORLD[wY][x].attr.traversable)
+        if (!WORLD[wY][x].traversable)
         {
             newH = wY;
             break;
@@ -375,6 +375,9 @@ void initPlayer()
     Player.bOnGround = false;
     Player.bLanding = false;
     Player.onGroundCounter = 0;
+    Player.bUnderWater = false;
+    Player.bSplashIn = false;
+    Player.bSplashOut = false;
 
     Player.max_health = 20;
     Player.health = 20;
@@ -508,10 +511,25 @@ void set_dust_fx(void)
         Player.FX.speedY = 1;
         Player.FX.pX = Player.pos.pX;
         Player.FX.pY = Player.pos.pY;
-        Player.FX.waterLevel = Player.waterLevel > 0;
+        Player.FX.waterLevel = Player.waterLevel;
     }
 }
 
+void set_splash_fx(bool bSplashIn = true)
+{
+    if (Player.FX.stateAnim != FX_SPLASH)
+    {
+        Player.FX.stateAnim = FX_SPLASH;
+        Player.FX.anim_frame = 0;
+        Player.FX.current_framerate = FX_FRAMERATE_SPLASH;
+        Player.FX.direction = Player.pos.direction;
+        Player.FX.speedX = 1;
+        Player.FX.speedY = 1;
+        Player.FX.pX = Player.pos.pX;
+        Player.FX.pY = Player.pos.pY;
+        Player.FX.waterLevel = Player.waterLevel;
+    }
+}
 void set_touched()
 {
     // @todo : gerer les type de monstres
@@ -624,30 +642,30 @@ void initWorld()
             if (wY < rowGround)
             {
                 WORLD[wY][wX].id = BLOCK_AIR;
-                WORLD[wY][wX].attr.traversable = 1;
-                WORLD[wY][wX].attr.opaque = 0;
-                WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
+                WORLD[wY][wX].traversable = 1;
+                WORLD[wY][wX].opaque = 0;
+                WORLD[wY][wX].life = BLOCK_LIFE_NA;
             }
             else if (wY == rowGround)
             {
                 WORLD[wY][wX].id = BLOCK_GROUND_TOP;
-                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
-                WORLD[wY][wX].attr.traversable = 0;
-                WORLD[wY][wX].attr.opaque = 1;
+                WORLD[wY][wX].life = BLOCK_LIFE_1;
+                WORLD[wY][wX].traversable = 0;
+                WORLD[wY][wX].opaque = 1;
             }
             else if (wY <= rowGround + 3) //entre surface et sous sol profond
             {
                 WORLD[wY][wX].id = BLOCK_GROUND;
-                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
-                WORLD[wY][wX].attr.traversable = 0;
-                WORLD[wY][wX].attr.opaque = 1;
+                WORLD[wY][wX].life = BLOCK_LIFE_1;
+                WORLD[wY][wX].traversable = 0;
+                WORLD[wY][wX].opaque = 1;
             }
             else //sous sol profond
             {
                 WORLD[wY][wX].id = BLOCK_ROCK;
-                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
-                WORLD[wY][wX].attr.traversable = 0;
-                WORLD[wY][wX].attr.opaque = 1;
+                WORLD[wY][wX].life = BLOCK_LIFE_1;
+                WORLD[wY][wX].traversable = 0;
+                WORLD[wY][wX].opaque = 1;
             }
         }
     }
@@ -669,9 +687,9 @@ void initWorld()
                 if (densite > MAX_DENSITE)
                 {
                     WORLD[wY][wX].id = BLOCK_AIR;
-                    WORLD[wY][wX].attr.traversable = 1;
-                    WORLD[wY][wX].attr.opaque = 0;
-                    WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
+                    WORLD[wY][wX].traversable = 1;
+                    WORLD[wY][wX].opaque = 0;
+                    WORLD[wY][wX].life = BLOCK_LIFE_NA;
                 }
             }
             else
@@ -681,17 +699,17 @@ void initWorld()
                     if (WORLD[wY][wX].id != BLOCK_AIR)
                     {
                         WORLD[wY][wX].id = BLOCK_UNDERGROUND_AIR;
-                        WORLD[wY][wX].attr.traversable = 1;
-                        WORLD[wY][wX].attr.opaque = 1;
-                        WORLD[wY][wX].attr.life = BLOCK_LIFE_NA;
+                        WORLD[wY][wX].traversable = 1;
+                        WORLD[wY][wX].opaque = 1;
+                        WORLD[wY][wX].life = BLOCK_LIFE_NA;
                     }
                 }
                 else
                 {
                     WORLD[wY][wX].id = BLOCK_ROCK;
-                    WORLD[wY][wX].attr.life = BLOCK_ROCK_DENSITY;
-                    WORLD[wY][wX].attr.traversable = 0;
-                    WORLD[wY][wX].attr.opaque = 1;
+                    WORLD[wY][wX].life = BLOCK_ROCK_DENSITY;
+                    WORLD[wY][wX].traversable = 0;
+                    WORLD[wY][wX].opaque = 1;
                     if (wY >= curProdondeur + 5)
                     {
                         int randSeed = rand() % 100;
@@ -700,14 +718,14 @@ void initWorld()
                             if (randSeed < 2)
                             {
                                 WORLD[wY][wX].id = BLOCK_DIAMANT;
-                                WORLD[wY][wX].attr.life = BLOCK_DIAMANT_DENSITY;
+                                WORLD[wY][wX].life = BLOCK_DIAMANT_DENSITY;
                                 continue;
                             }
 
                             if (randSeed <= 20)
                             {
                                 WORLD[wY][wX].id = BLOCK_REDSTONE;
-                                WORLD[wY][wX].attr.life = BLOCK_REDSTONE_DENSITY;
+                                WORLD[wY][wX].life = BLOCK_REDSTONE_DENSITY;
                                 continue;
                             }
                         }
@@ -716,19 +734,19 @@ void initWorld()
                             if (randSeed < 2)
                             {
                                 WORLD[wY][wX].id = BLOCK_JADE;
-                                WORLD[wY][wX].attr.life = BLOCK_JADE_DENSITY;
+                                WORLD[wY][wX].life = BLOCK_JADE_DENSITY;
                                 continue;
                             }
                             else if (randSeed <= 4)
                             {
                                 WORLD[wY][wX].id = BLOCK_OR;
-                                WORLD[wY][wX].attr.life = BLOCK_OR_DENSITY;
+                                WORLD[wY][wX].life = BLOCK_OR_DENSITY;
                                 continue;
                             }
                             else if (randSeed <= 14)
                             {
                                 WORLD[wY][wX].id = BLOCK_CUIVRE;
-                                WORLD[wY][wX].attr.life = BLOCK_CUIVRE_DENSITY;
+                                WORLD[wY][wX].life = BLOCK_CUIVRE_DENSITY;
                                 continue;
                             }
                         }
@@ -737,13 +755,13 @@ void initWorld()
                             if (randSeed < 20)
                             {
                                 WORLD[wY][wX].id = BLOCK_FER;
-                                WORLD[wY][wX].attr.life = BLOCK_FER_DENSITY;
+                                WORLD[wY][wX].life = BLOCK_FER_DENSITY;
                                 continue;
                             }
                             else if (randSeed < 50)
                             {
                                 WORLD[wY][wX].id = BLOCK_CHARBON;
-                                WORLD[wY][wX].attr.life = BLOCK_CHARBON_DENSITY;
+                                WORLD[wY][wX].life = BLOCK_CHARBON_DENSITY;
                                 continue;
                             }
                         }
@@ -762,24 +780,24 @@ void initWorld()
         for (int wY = 0; wY < (WORLD_HEIGHT - 1); wY++)
         {
             TworldTile brick = WORLD[wY][wX];
-            if (!WORLD[wY][wX].attr.traversable)
+            if (!WORLD[wY][wX].traversable)
             {
                 //Sauvegarde de la hauteur courante et de la hauteur originelle
                 WORLD[HEADER_ROW][wX].id = wY;
                 WORLD[REF_ROW][wX].id = wY;
 #if 0
                 WORLD[wY][wX].id = BLOCK_GROUND_TOP;
-                WORLD[wY][wX].attr.traversable = 0;
-                WORLD[wY][wX].attr.life = BLOCK_LIFE_1;
-                WORLD[wY][wX].attr.opaque = 1;
+                WORLD[wY][wX].traversable = 0;
+                WORLD[wY][wX].life = BLOCK_LIFE_1;
+                WORLD[wY][wX].opaque = 1;
 
                 //Si possible on change la tile juste en dessous pour du ground
                 if (wY + 1 < (WORLD_HEIGHT - 1))
                 {
                     WORLD[wY + 1][wX].id = BLOCK_GROUND;
-                    WORLD[wY + 1][wX].attr.traversable = 0;
-                    WORLD[wY + 1][wX].attr.life = BLOCK_LIFE_1;
-                    WORLD[wY + 1][wX].attr.opaque = 1;
+                    WORLD[wY + 1][wX].traversable = 0;
+                    WORLD[wY + 1][wX].life = BLOCK_LIFE_1;
+                    WORLD[wY + 1][wX].opaque = 1;
                 }
                 //Et celle du dessus par de l'herbe
                 if (wY - 1 >= 0)
@@ -788,10 +806,10 @@ void initWorld()
                     if (rand() % 100 < 12)
                     {
                         WORLD[wY - 1][wX].id = BLOCK_GRASS;
-                        WORLD[wY - 1][wX].attr.life = BLOCK_LIFE_NA;
-                        WORLD[wY - 1][wX].attr.traversable = 1;
-                        WORLD[wY - 1][wX].attr.opaque = 1;
-                        WORLD[wY - 1][wX].attr.spriteVariation = rand() % 3;
+                        WORLD[wY - 1][wX].life = BLOCK_LIFE_NA;
+                        WORLD[wY - 1][wX].traversable = 1;
+                        WORLD[wY - 1][wX].opaque = 1;
+                        WORLD[wY - 1][wX].spriteVariation = rand() % 3;
                     }
                 }
 #endif
@@ -807,7 +825,7 @@ void initWorld()
     for (int nbW = 0; nbW < WORLD_WIDTH - 4; nbW++)
     {
         int curP = WORLD[REF_ROW][4 + nbW].id;
-        WORLD[(curP - 1)][4 + nbW].attr.Level = MAX_WATER_LEVEL;
+        WORLD[(curP - 1)][4 + nbW].Level = MAX_WATER_LEVEL;
     }
 
     //On update en boucle de force pour stabiliser l'eau
@@ -854,19 +872,19 @@ void initWorld()
             }
             nbSearch++;
 
-        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
-                 !tile1.attr.traversable && !tileG1.attr.traversable && !tileD1.attr.traversable &&
-                 !tile2.attr.traversable && !tileG2.attr.traversable && !tileD2.attr.traversable &&
-                 !tile.attr.Level == 0 && !tileG.attr.Level == 0 && !tileD.attr.Level == 0 &&
-                 !tileGG.attr.traversable && !tileDD.attr.traversable && nbSearch < 50);
+        } while (!tile.traversable && !tileG.traversable && !tileD.traversable &&
+                 !tile1.traversable && !tileG1.traversable && !tileD1.traversable &&
+                 !tile2.traversable && !tileG2.traversable && !tileD2.traversable &&
+                 !tile.Level == 0 && !tileG.Level == 0 && !tileD.Level == 0 &&
+                 !tileGG.traversable && !tileDD.traversable && nbSearch < 50);
 
         if (bFound)
         {
             WORLD[hauteur - 1][posX].id = BLOCK_TREE;
-            WORLD[hauteur - 1][posX].attr.life = BLOCK_LIFE_1;
-            WORLD[hauteur - 1][posX].attr.traversable = 1;
-            WORLD[hauteur - 1][posX].attr.opaque = 1;
-            WORLD[hauteur - 1][posX].attr.spriteVariation = rand() % 3;
+            WORLD[hauteur - 1][posX].life = BLOCK_LIFE_1;
+            WORLD[hauteur - 1][posX].traversable = 1;
+            WORLD[hauteur - 1][posX].opaque = 1;
+            WORLD[hauteur - 1][posX].spriteVariation = rand() % 3;
             nbTrees++;
         }
         else
@@ -893,8 +911,8 @@ void initWorld()
             tileG = getWorldAt(posX - 1, hauteur - 1);
             tileD = getWorldAt(posX + 1, hauteur - 1);
             // @todo tester que le zombi est pas deja sur un autre ennemi (un marqueur sur la tile ? )
-        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
-                 !tile.attr.Level && !tileG.attr.Level && !tileD.attr.Level);
+        } while (!tile.traversable && !tileG.traversable && !tileD.traversable &&
+                 !tile.Level && !tileG.Level && !tileD.Level);
 
         //Skel
         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
@@ -936,8 +954,8 @@ void initWorld()
             tileG = getWorldAt(posX - 1, hauteur - 1);
             tileD = getWorldAt(posX + 1, hauteur - 1);
             // @todo tester que le zombi est pas deja sur un autre ennemi (un marqueur sur la tile ? )
-        } while (!tile.attr.traversable && !tileG.attr.traversable && !tileD.attr.traversable &&
-                 !tile.attr.Level && !tileG.attr.Level && !tileD.attr.Level);
+        } while (!tile.traversable && !tileG.traversable && !tileD.traversable &&
+                 !tile.Level && !tileG.Level && !tileD.Level);
 
         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
         ENNEMIES[NB_WORLD_ENNEMIES].worldX = posX;
@@ -975,7 +993,7 @@ void initWorld()
             {
                 if (seed <= 60)
                 {
-                    if (WORLD[wY][wX].attr.traversable && WORLD[wY][wX].attr.Level == 0 && WORLD[wY][wX + 1].attr.traversable && WORLD[wY][wX - 1].attr.traversable && WORLD[wY - 1][wX].attr.traversable)
+                    if (WORLD[wY][wX].traversable && WORLD[wY][wX].Level == 0 && WORLD[wY][wX + 1].traversable && WORLD[wY][wX - 1].traversable && WORLD[wY - 1][wX].traversable)
                     {
                         //Spiders
                         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
@@ -1011,8 +1029,9 @@ void initWorld()
     }
 
     Serial.printf("NB_WORLD_ENNEMIES:%d\n", NB_WORLD_ENNEMIES);
-    Serial.printf("Min:%f / Max:%f\n", minN, maxN);
 
+    Serial.printf("TILE SIZE:%d  WORLD SIZE:%d\n", sizeof(TworldTile), sizeof(WORLD));
+    
     NB_WORLD_ITEMS = 0;
     CURRENT_QUEUE_ITEMS = 0;
 
@@ -1096,6 +1115,11 @@ void drawPlayer()
     case FX_DUST:
     {
         anim_player_fx_dust();
+        break;
+    }
+    case FX_SPLASH:
+    {
+        anim_player_fx_splash();
         break;
     }
     }
@@ -1433,7 +1457,7 @@ void drawTiles()
 
                     int curLight = MAX_LIGHT_INTENSITY;
                     // @todo gerer la nuit (dans ce cas pas de max light et ground.. ou la lune ?)
-                    if (brick->attr.opaque) // || wY > profondeurColonne)
+                    if (brick->opaque) // || wY > profondeurColonne)
                     {
                         if (profondeurColonne != 0)
                         {
@@ -1462,26 +1486,26 @@ void drawTiles()
 
                     if (value == BLOCK_AIR)
                     {
-                        if (brick->attr.Level > 0)
+                        if (brick->Level > 0)
                         {
                             bool bOnSurface = false;
                             if (wY > 0)
-                                bOnSurface = (WORLD[wY - 1][wX].attr.Level == 0); // && WORLD[wY - 1][wX].attr.traversable);
+                                bOnSurface = (WORLD[wY - 1][wX].Level == 0); // && WORLD[wY - 1][wX].traversable);
 
-                            drawWaterTile(px, py, NULL, curLight, brick->attr.Level, bOnSurface);
+                            drawWaterTile(px, py, NULL, curLight, brick->Level, bOnSurface);
                         }
                         //rien le fond
                     }
                     else if (value == BLOCK_UNDERGROUND_AIR)
                     {
                         //background de terrassement
-                        if (brick->attr.Level > 0)
+                        if (brick->Level > 0)
                         {
                             bool bOnSurface = false;
                             if (wY > 0)
-                                bOnSurface = (WORLD[wY - 1][wX].attr.Level == 0); // && WORLD[wY - 1][wX].attr.traversable);
+                                bOnSurface = (WORLD[wY - 1][wX].Level == 0); // && WORLD[wY - 1][wX].traversable);
 
-                            drawWaterTile(px, py, back_ground.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                            drawWaterTile(px, py, back_ground.pixel_data, curLight, brick->Level, bOnSurface);
                         }
                         else
                             drawTile(px, py, back_ground.pixel_data, curLight);
@@ -1492,24 +1516,24 @@ void drawTiles()
                     }
                     else if (value == BLOCK_GRASS)
                     {
-                        if (brick->attr.Level > 0)
+                        if (brick->Level > 0)
                         {
                             bool bOnSurface = false;
                             if (wY > 0)
-                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
+                                bOnSurface = ((WORLD[wY - 1][wX].Level == 0) && WORLD[wY - 1][wX].traversable);
 
-                            if (brick->attr.spriteVariation == 0)
-                                drawWaterTileMask(px, py, grass1.pixel_data, curLight, brick->attr.Level, bOnSurface);
-                            else if (brick->attr.spriteVariation == 1)
-                                drawWaterTileMask(px, py, grass2.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                            if (brick->spriteVariation == 0)
+                                drawWaterTileMask(px, py, grass1.pixel_data, curLight, brick->Level, bOnSurface);
+                            else if (brick->spriteVariation == 1)
+                                drawWaterTileMask(px, py, grass2.pixel_data, curLight, brick->Level, bOnSurface);
                             else
-                                drawWaterTileMask(px, py, grass3.pixel_data, curLight, brick->attr.Level, bOnSurface);
+                                drawWaterTileMask(px, py, grass3.pixel_data, curLight, brick->Level, bOnSurface);
                         }
                         else
                         {
-                            if (brick->attr.spriteVariation == 0)
+                            if (brick->spriteVariation == 0)
                                 drawTileMask(px, py, grass1.pixel_data, curLight);
-                            else if (brick->attr.spriteVariation == 1)
+                            else if (brick->spriteVariation == 1)
                                 drawTileMask(px, py, grass2.pixel_data, curLight);
                             else
                                 drawTileMask(px, py, grass3.pixel_data, curLight);
@@ -1521,35 +1545,35 @@ void drawTiles()
                     }
                     else if (value == BLOCK_ROCK)
                     {
-                        drawTile(px, py, rock_empty.pixel_data, curLight);
+                        drawTile(px, py, rock_empty.pixel_data, curLight, brick->contour);
                     }
                     else if (value == BLOCK_CHARBON) //
                     {
-                        drawTile(px, py, rock_charbon.pixel_data, curLight);
+                        drawTile(px, py, rock_charbon.pixel_data, curLight, brick->contour);
                     }
                     else if (value == BLOCK_CUIVRE) //
                     {
-                        drawTile(px, py, rock_cuivre.pixel_data, curLight);
+                        drawTile(px, py, rock_cuivre.pixel_data, curLight, brick->contour);
                     }
                     else if (value == BLOCK_FER) //
                     {
-                        drawTile(px, py, rock_fer.pixel_data, curLight);
+                        drawTile(px, py, rock_fer.pixel_data, curLight, brick->contour);
                     }
                     else if (value == BLOCK_DIAMANT) //
                     {
-                        drawTile(px, py, rock_diamant.pixel_data, curLight);
+                        drawTile(px, py, rock_diamant.pixel_data, curLight, brick->contour);
                     }
                     else if (value == BLOCK_JADE) //
                     {
-                        drawTile(px, py, rock_jade.pixel_data, curLight);
+                        drawTile(px, py, rock_jade.pixel_data, curLight, brick->contour);
                     }
                     else if (value == BLOCK_OR) //
                     {
-                        drawTile(px, py, rock_or.pixel_data, curLight);
+                        drawTile(px, py, rock_or.pixel_data, curLight, brick->contour);
                     }
                     else if (value == BLOCK_REDSTONE) //
                     {
-                        drawTile(px, py, rock_redstone.pixel_data, curLight);
+                        drawTile(px, py, rock_redstone.pixel_data, curLight, brick->contour);
                     }
                     /*                    else if (value == 0x60) //
                     {
@@ -1566,7 +1590,7 @@ void drawTiles()
                     */
                     else
                     {
-                        drawTile(px, py, rock_empty.pixel_data, curLight);
+                        drawTile(px, py, rock_empty.pixel_data, curLight, brick->contour);
                     }
                     /*
                     else if (WORLD[wY][wX].id == 'o') //16 coin
@@ -1628,7 +1652,7 @@ void drawTilesMasking()
 
                     int curLight = MAX_LIGHT_INTENSITY;
                     // @todo gerer la nuit (dans ce cas pas de max light et ground.. ou la lune ?)
-                    if (brick->attr.opaque) // || wY > profondeurColonne)
+                    if (brick->opaque) // || wY > profondeurColonne)
                     {
                         if (profondeurColonne != 0)
                         {
@@ -1654,45 +1678,19 @@ void drawTilesMasking()
 #ifdef DEBUG
                     curLight = MAX_LIGHT_INTENSITY;
 #endif
-                    /*   if (value == BLOCK_GRASS) //
-                    {                        
-                        if (brick->attr.Level > 0)
-                        {
-                            bool bOnSurface = false;
-                            if (wY > 0)
-                                bOnSurface = ((WORLD[wY - 1][wX].attr.Level == 0) && WORLD[wY - 1][wX].attr.traversable);
-                            
-                            if (brick->attr.spriteVariation == 0)
-                                drawWaterTileMask(px, py, grass1.pixel_data, curLight, brick->attr.Level, bOnSurface);
-                            else if (brick->attr.spriteVariation == 1)
-                                drawWaterTileMask(px, py, grass2.pixel_data, curLight, brick->attr.Level, bOnSurface);
-                            else
-                                drawWaterTileMask(px, py, grass3.pixel_data, curLight, brick->attr.Level, bOnSurface);
 
-                        }
-                        else
-                        {
-                            if (brick->attr.spriteVariation == 0)
-                                drawTileMask(px, py, grass1.pixel_data, curLight);
-                            else if (brick->attr.spriteVariation == 1)
-                                drawTileMask(px, py, grass2.pixel_data, curLight);
-                            else
-                                drawTileMask(px, py, grass3.pixel_data, curLight);
-                        }
-                    }
-                    else */
                     if (value == BLOCK_TREE) //
                     {
                         int realpx = px;
                         int realpy = py;
-                        if (brick->attr.hit)
+                        if (brick->hit)
                         {
                             realpx += random(-itemShakeAmount, itemShakeAmount);
                             realpy += random(-(itemShakeAmount >> 1), itemShakeAmount >> 1);
                         }
-                        if (brick->attr.spriteVariation == 0)
+                        if (brick->spriteVariation == 0)
                             drawTreeTileMask(realpx, realpy, tree1.pixel_data, tree1.width, tree1.height, curLight);
-                        else if (brick->attr.spriteVariation == 1)
+                        else if (brick->spriteVariation == 1)
                             drawTreeTileMask(realpx, realpy, tree2.pixel_data, tree2.width, tree2.height, curLight);
                         else
                             drawTreeTileMask(realpx, realpy, tree3.pixel_data, tree3.width, tree3.height, curLight);
@@ -1826,7 +1824,7 @@ void drawEffects()
                 parts.createDirectionalExplosion(currentTileTarget.pX + 8, currentTileTarget.pY + 8, 8, 3, direction, currentTileTarget.itemColor, ARCADA_BLACK); //@todo colorer avec la couleur de la brique en cours de travail
                 sndPlayerCanal1.play(AudioSamplePioche);
 
-                currentTileTarget.tile->attr.hit = 1;
+                currentTileTarget.tile->hit = 1;
                 itemShakeAmount = DEFAULT_ITEM_SHAKE_AMOUNT;
             }
         }
@@ -2107,7 +2105,7 @@ bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y)
             }
             /* keep looping until the monster's sight is blocked *
        * by an object at the updated x,y coord             */
-        } while (WORLD[y][x].attr.traversable == true);
+        } while (WORLD[y][x].traversable == true);
 
         /* NOTE: sight_blocked is a function that returns true      *
        * if an object at the x,y coord. would block the monster's *
@@ -2134,7 +2132,7 @@ bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y)
             {
                 return true;
             }
-        } while (WORLD[y][x].attr.traversable == true);
+        } while (WORLD[y][x].traversable == true);
         return false;
     }
 }
@@ -2279,10 +2277,14 @@ void checkPlayerState()
         uint8_t tileTL = getWorldAtPix(Player.pos.newX, Player.pos.pY);
         uint8_t tileBL = getWorldAtPix(Player.pos.newX, Player.pos.pY + 15);
 
+
 */
     //Deux briques SUR player ?
-    brique_PLAYER = getWorldAt(Player.pos.worldX, Player.pos.worldY);
-
+    brique_PLAYER_TL = getWorldAtPix(Player.pos.pX, Player.pos.pY);
+    brique_PLAYER_BL = getWorldAtPix(Player.pos.pX, Player.pos.pY + 15);
+    brique_PLAYER_TR = getWorldAtPix(Player.pos.pX + 15, Player.pos.pY);
+    brique_PLAYER_BR = getWorldAtPix(Player.pos.pX + 15, Player.pos.pY + 15);
+    
     //Au dessus
     brique_UP = getWorldAt(Player.pos.worldX, Player.pos.YUp);
 
@@ -2293,7 +2295,24 @@ void checkPlayerState()
     //Devant
     brique_FRONT = getWorldAt(Player.pos.XFront, Player.pos.worldY);
 
-    Player.waterLevel = brique_PLAYER.attr.Level;
+    uint8_t oldWater = Player.waterLevel;
+    Player.waterLevel = max(brique_PLAYER_BL.Level , brique_PLAYER_BR.Level);
+
+    Player.bSplashIn = false;
+    Player.bSplashOut = false;
+    Player.bUnderWater = false;
+
+    if (brique_PLAYER_TL.Level >= 2 || brique_PLAYER_TR.Level >= 2)
+        Player.bUnderWater = true;
+
+    if (oldWater >= 5 && Player.waterLevel <= 2)
+    {
+        Player.bSplashOut = true;
+    }
+    else if (oldWater <=2  && Player.waterLevel >= 5)
+    {
+        Player.bSplashIn = true;
+    }
 }
 
 void checkPlayerCollisionsEntities()
@@ -2394,7 +2413,7 @@ void updatePlayer()
     }
     else if (bWin)
     {
-        if ((brique_FRONT.attr.traversable) &&
+        if ((brique_FRONT.traversable) &&
             ((Player.pos.direction > 0 && (Player.pos.pX < ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH)) ||
              (Player.pos.direction < 0 && (Player.pos.pX >= 2))))
         {
@@ -2474,11 +2493,9 @@ void computePlayerAnimations()
                 if (Player.bLanding)
                 {
                     //Anim aterrissage ?
-                    //set_big_grounding(); ?
-                    //Spawn Effect
-                    // set_double_jump_fx(true);
                     set_dust_fx();
                 }
+                
                 if (Player.bWantWalk) // demannde de deplacement)
                 {
                     if (Player.bWalking) //On a bougé
@@ -2495,6 +2512,14 @@ void computePlayerAnimations()
                 }
             }
         }
+        if (Player.bSplashIn)
+        {
+            set_splash_fx();
+        }
+        else if (Player.bSplashOut)
+        {
+            set_splash_fx();
+        }        
     }
 }
 
@@ -2565,7 +2590,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     {
         TworldTile tileTL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y);
         TworldTile tileBL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y + 15);
-        if ((!tileTL.attr.traversable) || (!tileBL.attr.traversable))
+        if ((!tileTL.traversable) || (!tileBL.traversable))
         {
             currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16)) + 16;
             currentEnnemy->speed_x = -currentEnnemy->speed_x;
@@ -2575,7 +2600,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     {
         TworldTile tileTR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y);
         TworldTile tileBR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y + 15);
-        if ((!tileTR.attr.traversable) || (!tileBR.attr.traversable))
+        if ((!tileTR.traversable) || (!tileBR.traversable))
         {
             currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16));
             currentEnnemy->speed_x = -currentEnnemy->speed_x;
@@ -2590,7 +2615,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileTL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y);
         TworldTile tileTR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y);
-        if ((!tileTL.attr.traversable) || (!tileTR.attr.traversable))
+        if ((!tileTL.traversable) || (!tileTR.traversable))
         {
             currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16)) + 16;
             currentEnnemy->speed_y = 0;
@@ -2606,7 +2631,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileBL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y + 16);
         TworldTile tileBR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y + 16);
-        if ((!tileBL.attr.traversable) || (!tileBR.attr.traversable))
+        if ((!tileBL.traversable) || (!tileBR.traversable))
         {
             currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16));
             currentEnnemy->bOnGround = true;
@@ -2699,7 +2724,7 @@ void updateEnnemyIA(Tennemy *currentEnnemy)
                     if (currentEnnemy->speed_x <= 0)
                     {
                         TworldTile tileBL = getWorldAtPix((currentEnnemy->x + currentEnnemy->speed_x), currentEnnemy->y + 16);
-                        if (tileBL.attr.traversable)
+                        if (tileBL.traversable)
                         {
                             currentEnnemy->speed_x = -currentEnnemy->speed_x;
                         }
@@ -2707,7 +2732,7 @@ void updateEnnemyIA(Tennemy *currentEnnemy)
                     else
                     {
                         TworldTile tileBR = getWorldAtPix((currentEnnemy->x + currentEnnemy->speed_x) + 15, currentEnnemy->y + 16);
-                        if (tileBR.attr.traversable)
+                        if (tileBR.traversable)
                         {
                             currentEnnemy->speed_x = -currentEnnemy->speed_x;
                         }
@@ -2771,7 +2796,7 @@ void checkItemCollisionsWorld(Titem *currentItem)
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileTL = getWorldAtPix(currentItem->x + 0, currentItem->new_y);
         TworldTile tileTR = getWorldAtPix(currentItem->x + 15, currentItem->new_y);
-        if ((!tileTL.attr.traversable) || (!tileTR.attr.traversable))
+        if ((!tileTL.traversable) || (!tileTR.traversable))
         {
             currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16)) + 16;
             currentItem->speed_y = 0;
@@ -2787,7 +2812,7 @@ void checkItemCollisionsWorld(Titem *currentItem)
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         TworldTile tileBL = getWorldAtPix(currentItem->x + 0, currentItem->new_y + 16);
         TworldTile tileBR = getWorldAtPix(currentItem->x + 15, currentItem->new_y + 16);
-        if ((!tileBL.attr.traversable) || (!tileBR.attr.traversable))
+        if ((!tileBL.traversable) || (!tileBR.traversable))
         {
             currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16));
             currentItem->bOnGround = true;
@@ -2833,23 +2858,26 @@ void ErosionUpdate()
         TworldTile *tileR = lastColErosion < (WORLD_WIDTH - 1) ? &WORLD[lastRowErosion][lastColErosion + 1] : NULL;
         TworldTile *tileU = lastRowErosion > 0 ? &WORLD[lastRowErosion - 1][lastColErosion] : NULL;
         TworldTile *tileD = lastColErosion < (WORLD_HEIGHT - 1) ? &WORLD[lastRowErosion + 1][lastColErosion] : NULL;
-        if (tile->attr.traversable)
+        if (tile->traversable)
             continue;
 
-        uint8_t matrix = BLOCK_GROUND;
-        if (tile->id >= BLOCK_GROUND && tile->id <= BLOCK_GROUND_ALL)
+        uint8_t matrix = 0;
+        if (!tile->traversable)
         {
-            if (tileL && tileL->attr.traversable)
-                matrix |= BLOCK_GROUND_LEFT;
-            if (tileR && tileR->attr.traversable)
-                matrix |= BLOCK_GROUND_RIGHT;
-            if (tileU && tileU->attr.traversable && tileU->attr.Level == 0)
-                matrix |= BLOCK_GROUND_TOP;
-            if (tileD && tileD->attr.traversable)
-                matrix |= BLOCK_GROUND_BOTTOM;
+            if (tileL && tileL->traversable)
+                matrix |= 1;
+            if (tileR && tileR->traversable)
+                matrix |= 4;
+            if (tileU && tileU->traversable && tileU->Level == 0)
+                matrix |= 2;
+            if (tileD && tileD->traversable)
+                matrix |= 8;
 
-            tile->id = matrix;
+            tile->contour = matrix;
         }
+
+        if (tile->id >= BLOCK_GROUND && tile->id <= BLOCK_GROUND_ALL)
+            tile->id = (matrix | BLOCK_GROUND);
     }
     lastRowErosion++;
     if (lastRowErosion == WORLD_HEIGHT)
@@ -2870,7 +2898,7 @@ void FoliageUpdate()
 
 void updatePlayerVelocities()
 {
-    if (Player.waterLevel > 5)
+    if (Player.bUnderWater) //Tete sous l'eau
     {
         //Gravity
         if (everyXFrames(5)) //Probleme, faut passer en float...en attendant on saute des frame...
@@ -2882,7 +2910,7 @@ void updatePlayerVelocities()
                 Player.pos.speedX --;
             else if (Player.pos.speedX < 0)
                 Player.pos.speedX ++;
-        }
+        }       //Attention du coup le onground ne marchge plus
 
         if (Player.pos.speedX > (MAX_SPEED_X >> 1))
             Player.pos.speedX = (MAX_SPEED_X >> 1);
@@ -2920,7 +2948,7 @@ void updatePlayerVelocities()
     }
 }
 
-void updatePlayerPosition()
+inline void updatePlayerPosition()
 {
     //if (Player.bWantWalk)
     {
@@ -2944,25 +2972,25 @@ void checkPlayerCollisionsWorld()
 {
     bool bWasOnGround = Player.bOnGround;
     //X
-    if (Player.pos.speedX <= 0)
+    if (Player.pos.speedX < 0)
     {
         // +0 +0
         // +0 +15
         TworldTile tileTL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + PLAYER_Y_BDM);
         TworldTile tileBL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + 15);
-        if (!tileTL.attr.traversable || !tileBL.attr.traversable)
+        if (!tileTL.traversable || !tileBL.traversable)
         {
             Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + (16 - PLAYER_X_BDM);
             Player.pos.speedX = 0;
         }
     }
-    else
+    else if (Player.pos.speedX > 0)
     {
         // +16 +0
         // +16 +15
         TworldTile tileTR = getWorldAtPix(Player.pos.newX + (16 - PLAYER_X_BDM), Player.pos.pY + PLAYER_Y_BDM);
         TworldTile tileBR = getWorldAtPix(Player.pos.newX + (16 - PLAYER_X_BDM), Player.pos.pY + 15);
-        if (!tileTR.attr.traversable || !tileBR.attr.traversable)
+        if (!tileTR.traversable || !tileBR.traversable)
         {
             Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + PLAYER_X_BDM;
             Player.pos.speedX = 0;
@@ -2973,6 +3001,7 @@ void checkPlayerCollisionsWorld()
     Player.bFalling = false;
     Player.bOnGround = false;
     Player.bLanding = false;
+
     if (Player.pos.speedY <= 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
@@ -2980,7 +3009,7 @@ void checkPlayerCollisionsWorld()
         // +15 +0
         TworldTile tileTL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.newY + PLAYER_Y_BDM);
         TworldTile tileTR = getWorldAtPix(Player.pos.newX + (15 - PLAYER_X_BDM), Player.pos.newY + PLAYER_Y_BDM);
-        if (!tileTL.attr.traversable || !tileTR.attr.traversable)
+        if (!tileTL.traversable || !tileTR.traversable)
         {
             Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16)) + (16 - PLAYER_Y_BDM); // - PLAYER_Y_BDM ??
             Player.pos.speedY = 0;
@@ -2999,7 +3028,7 @@ void checkPlayerCollisionsWorld()
 
         TworldTile tileBL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.newY + 16);
         TworldTile tileBR = getWorldAtPix(Player.pos.newX + (15 - PLAYER_X_BDM), Player.pos.newY + 16);
-        if (!tileBL.attr.traversable || !tileBR.attr.traversable)
+        if (!tileBL.traversable || !tileBR.traversable)
         {
             Player.pos.newY = Player.pos.newY - (Player.pos.newY % 16);
             Player.bOnGround = true;
@@ -3091,7 +3120,7 @@ void checkPlayerInputs()
                 currentTileTarget.pX = currentTileTarget.wX * 16;
                 currentTileTarget.pY = currentTileTarget.wY * 16;
                 currentTileTarget.tile = &WORLD[currentTileTarget.wY][currentTileTarget.wX];
-                currentTileTarget.currentLife = currentTileTarget.tile->attr.life * TILE_LIFE_PRECISION;
+                currentTileTarget.currentLife = currentTileTarget.tile->life * TILE_LIFE_PRECISION;
                 if (currentTileTarget.tile->id >= BLOCK_ROCK && currentTileTarget.tile->id <= BLOCK_JADE)
                 {
                     currentTileTarget.itemColor = RGBConvert(147, 122, 73);
@@ -3116,14 +3145,14 @@ void checkPlayerInputs()
             if (counterActionB >= FRAMES_ACTION_B) //Action (pour le moment minage seulement)
             {
                 TworldTile *tile = currentTileTarget.tile;
-                currentTileTarget.tile->attr.hit = 0;
+                currentTileTarget.tile->hit = 0;
                 counterActionB = 0;
                 coolDownActionB = FRAMES_COOLDOWN_B;
                 lastCibleX = lastCibleY = 0;
                 bool bHit = false;
 
                 //Serial.printf("Dig:%d,%d v:%d\n", currentTileTarget.wX, currentTileTarget.wY, tile);
-                if (tile->attr.life != BLOCK_LIFE_NA && Player.pos.YDown < (WORLD_HEIGHT - 1))
+                if (tile->life != BLOCK_LIFE_NA && Player.pos.YDown < (WORLD_HEIGHT - 1))
                 {
                     //on teste si on a creusé dans de la pierre solide et on exclue aussi le ground ( @todo : spawn herbe quand meme )
                     if (tile->id >= BLOCK_ROCK && tile->id <= BLOCK_JADE)
@@ -3134,9 +3163,9 @@ void checkPlayerInputs()
                         createDropFrom(currentTileTarget.wX, currentTileTarget.wY, tile->id);
 
                         tile->id = BLOCK_UNDERGROUND_AIR;
-                        tile->attr.life = BLOCK_LIFE_NA;
-                        tile->attr.traversable = 1;
-                        tile->attr.opaque = 1;
+                        tile->life = BLOCK_LIFE_NA;
+                        tile->traversable = 1;
+                        tile->opaque = 1;
                     }
                     else if (tile->id == BLOCK_TREE)
                     {
@@ -3145,9 +3174,9 @@ void checkPlayerInputs()
                         createDropFrom(currentTileTarget.wX, currentTileTarget.wY, tile->id);
 
                         tile->id = BLOCK_AIR;
-                        tile->attr.life = BLOCK_LIFE_NA;
-                        tile->attr.traversable = 1;
-                        tile->attr.opaque = 0;
+                        tile->life = BLOCK_LIFE_NA;
+                        tile->traversable = 1;
+                        tile->opaque = 0;
                     }
                     else
                     {
@@ -3161,15 +3190,15 @@ void checkPlayerInputs()
                         if (brickUp.id == BLOCK_GRASS)
                         {
                             brickUp.id = BLOCK_AIR;
-                            brickUp.attr.life = BLOCK_LIFE_NA;
-                            brickUp.attr.traversable = 1;
-                            brickUp.attr.opaque = 0;
+                            brickUp.life = BLOCK_LIFE_NA;
+                            brickUp.traversable = 1;
+                            brickUp.opaque = 0;
                             setWorldAt(currentTileTarget.wX, currentTileTarget.wY - 1, brickUp);
                         }
                         tile->id = BLOCK_AIR;
-                        tile->attr.life = BLOCK_LIFE_NA;
-                        tile->attr.traversable = 1;
-                        tile->attr.opaque = 0;
+                        tile->life = BLOCK_LIFE_NA;
+                        tile->traversable = 1;
+                        tile->opaque = 0;
                     }
                     if (bHit)
                     {
@@ -3193,6 +3222,8 @@ void checkPlayerInputs()
                         }
                         parts.createDirectionalExplosion(currentTileTarget.pX + 8, currentTileTarget.pY + 8, 6, 6, direction, currentTileTarget.itemColor, ARCADA_BLACK); //@todo colorer avec la couleur de la brique en cours de travail
                         cameraShakeAmount = CAMERA_BREAK_ROCK_AMOUNT;
+                        //On force l'erosion sur la ligne du dessus ca raff plus rapidement
+                        lastRowErosion = currentTileTarget.wY - 1;
                         updateHauteurColonne(currentTileTarget.wX, currentTileTarget.wY);
                     }
                 }
@@ -3206,7 +3237,7 @@ void checkPlayerInputs()
 
         counterActionB = 0;
         if (currentTileTarget.tile != NULL)
-            currentTileTarget.tile->attr.hit = 0;
+            currentTileTarget.tile->hit = 0;
 
         //currentTileTarget = {0};
 
@@ -3559,11 +3590,9 @@ bool LoadGame(uint8_t numEmplacement)
         {
             for (int wX = 0; wX < WORLD_WIDTH; wX++)
             {
-                uint8_t value = data.read();
-                WORLD[wY][wX].id = value;
-
-                uint16_t value16 = (data.read() << 8) | data.read();
-                WORLD[wY][wX].attr.RAW = value16;
+                uint8_t *buff = (uint8_t *)&WORLD[wY][wX];
+                for (int cptBuf = 0; cptBuf < sizeof(WORLD[wY][wX]); cptBuf++)
+                    buff[cptBuf] = data.read();
             }
         }
 
@@ -3595,13 +3624,9 @@ bool SaveGame(uint8_t numEmplacement)
         {
             for (int wX = 0; wX < WORLD_WIDTH; wX++)
             {
-                uint8_t value = WORLD[wY][wX].id;
-                data.write(value);
-                uint16_t value16 = WORLD[wY][wX].attr.RAW;
-                value = (value16 & 0xFF00) >> 8;
-                data.write(value);
-                value = (value16 & 0x00FF);
-                data.write(value);
+                uint8_t *buff = (uint8_t *)&WORLD[wY][wX];
+                for (int cptBuf = 0; cptBuf < sizeof(WORLD[wY][wX]); cptBuf++)
+                    data.write(buff[cptBuf]);
             }
         }
         data.flush();
@@ -3682,6 +3707,7 @@ void readInputs()
 
 void loop()
 {
+    static uint8_t _old_lastFrameDurationMs = lastFrameDurationMs;
     long elapsedTime;
 
     //long now = millis();
@@ -3714,8 +3740,12 @@ void loop()
 
     //elapsedTime = millis() - now;
 
-    if (lastFrameDurationMs > 35)
+    if (lastFrameDurationMs > 37 && (_old_lastFrameDurationMs != lastFrameDurationMs))
+    {
         Serial.printf("LFD:%d\n", lastFrameDurationMs);
+        _old_lastFrameDurationMs = lastFrameDurationMs;
+    }
+    
 }
 
 void anim_player_idle()
@@ -3952,48 +3982,63 @@ void anim_player_fx_dust()
         return;
     }
 
-    if (Player.FX.waterLevel > 0)
+    switch (Player.FX.anim_frame)
     {
-        switch (Player.FX.anim_frame)
-        {
-        case FX_FRAME_DUST_1:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_splash1.height), fx_splash1.width, fx_splash1.height, fx_splash1.pixel_data, Player.FX.direction);
-            break;
-        case FX_FRAME_DUST_2:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_splash2.height), fx_splash2.width, fx_splash2.height, fx_splash2.pixel_data, Player.FX.direction);
-            break;
-        case FX_FRAME_DUST_3:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_splash3.height), fx_splash3.width, fx_splash3.height, fx_splash3.pixel_data, Player.FX.direction);
-            break;
-        case FX_FRAME_DUST_4:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_splash4.height), fx_splash4.width, fx_splash4.height, fx_splash4.pixel_data, Player.FX.direction);
-            break;
-        case FX_FRAME_DUST_5:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_splash5.height), fx_splash5.width, fx_splash5.height, fx_splash5.pixel_data, Player.FX.direction);
-            break;
-        }
+    case FX_FRAME_DUST_1:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump1.width, fx_jump1.height, fx_jump1.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_DUST_2:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump2.width, fx_jump2.height, fx_jump2.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_DUST_3:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump3.width, fx_jump3.height, fx_jump3.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_DUST_4:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump4.width, fx_jump4.height, fx_jump4.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_DUST_5:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump5.width, fx_jump5.height, fx_jump5.pixel_data, Player.FX.direction);
+        break;
     }
-    else
-    {    
-        switch (Player.FX.anim_frame)
-        {
-        case FX_FRAME_DUST_1:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump1.width, fx_jump1.height, fx_jump1.pixel_data, Player.FX.direction);
-            break;
-        case FX_FRAME_DUST_2:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump2.width, fx_jump2.height, fx_jump2.pixel_data, Player.FX.direction);
-            break;
-        case FX_FRAME_DUST_3:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump3.width, fx_jump3.height, fx_jump3.pixel_data, Player.FX.direction);
-            break;
-        case FX_FRAME_DUST_4:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump4.width, fx_jump4.height, fx_jump4.pixel_data, Player.FX.direction);
-            break;
-        case FX_FRAME_DUST_5:
-            drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump5.width, fx_jump5.height, fx_jump5.pixel_data, Player.FX.direction);
-            break;
-        }
+}
+
+void anim_player_fx_splash()
+{
+    if (Player.FX.current_framerate == FX_FRAMERATE_SPLASH)
+    {
+        Player.FX.anim_frame++;
+        Player.FX.current_framerate = 0;
     }
+    Player.FX.current_framerate++;
+
+    if (Player.FX.anim_frame > FX_FRAME_SPLASH_5)
+    {
+        //Annulation de l'anim
+        Player.FX.stateAnim = FX_NONE;
+        return;
+    }
+
+    int baseY = (16 - fx_splash1.height);
+
+    switch (Player.FX.anim_frame)
+    {
+    case FX_FRAME_SPLASH_1:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + baseY, fx_splash1.width, fx_splash1.height, fx_splash1.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_SPLASH_2:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + baseY, fx_splash2.width, fx_splash2.height, fx_splash2.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_SPLASH_3:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + baseY, fx_splash3.width, fx_splash3.height, fx_splash3.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_SPLASH_4:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + baseY, fx_splash4.width, fx_splash4.height, fx_splash4.pixel_data, Player.FX.direction);
+        break;
+    case FX_FRAME_SPLASH_5:
+        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + baseY, fx_splash5.width, fx_splash5.height, fx_splash5.pixel_data, Player.FX.direction);
+        break;
+    }
+
 }
 
 #if 0

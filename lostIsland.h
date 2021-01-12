@@ -109,7 +109,10 @@ TworldTile brique_UP = {0};
 TworldTile brique_DOWN = {0};
 TworldTile brique_DOWN_FRONT = {0};
 TworldTile brique_FRONT = {0};
-TworldTile brique_PLAYER = {0};
+TworldTile brique_PLAYER_TL= {0};
+TworldTile brique_PLAYER_BL = {0};
+TworldTile brique_PLAYER_TR = {0};
+TworldTile brique_PLAYER_BR = {0};
 
 struct {
     TworldTile  *tile;

@@ -41,6 +41,7 @@ void PixelGameEngine::DrawSprite(int32_t x, int32_t y, Sprite* sprite, uint32_t 
 		}
 	}
   */
+
 void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int8_t DIR, int light)
 {
   uint16_t idx = 0;
@@ -297,35 +298,102 @@ void drawWaterTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, in
   }
 }
 
-void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light)
+
+ /**
+  * 
+  * MATRIX : 
+  * 1 LEFT
+  * 2 TOP
+  * 4 RIGHT
+  * 8 BOTTOM
+  * 
+  */
+ 
+void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light, uint8_t matrix)
 {
   uint16_t idx = 0;
 
+  int xStart = 0;
+  int yStart = 0;
+  int width = 16;
+  int height = 16;
+  
   if (light == 0)
   {
     canvas->fillRect(xMove, yMove, 16, 16, ARCADA_BLACK);
   }
   else if (light < 0 || light == MAX_LIGHT_INTENSITY)
   {
-    for (int16_t j = 0; j < 16; j++, yMove++)
+    if (matrix & 1)
     {
-      for (int16_t i = 0; i < 16; i++)
-      {
-        uint16_t value = (bitmap[idx++]) | (bitmap[idx++] << 8);
-        canvas->drawPixel(xMove + i, yMove, value);
-      }
+      xStart = 1;
+      canvas->fillRect(xMove, yMove, 1, 16, 0xBDB0);
     }
+    if (matrix & 8)
+    {
+      canvas->fillRect(xMove, yMove+15, 16, 1, 0xBDB0);
+      height -= 1;
+    }
+    if (matrix & 2)
+    {
+      canvas->fillRect(xMove, yMove, 16, 1, 0xBDB0);
+      yStart += 1;
+      yMove += 1;
+    }
+    if (matrix & 4)
+    {
+      canvas->fillRect(xMove+15, yMove, 1, 16, 0xBDB0);
+      width -= 1;
+    }
+
+    for (int16_t j = yStart; j < height; j++, yMove++)
+    {
+        idx = ((j << 4) + xStart) << 1;
+        for (int16_t i = xStart; i < width; i++)
+        {
+          uint16_t value = (bitmap[idx++]) | (bitmap[idx++] << 8);
+          canvas->drawPixel(xMove + i, yMove, value);
+        }
+    }
+
+
   }
   else
   {
-    for (int16_t j = 0; j < 16; j++, yMove++)
+    if (matrix & 1)
     {
-      for (int16_t i = 0; i < 16; i++)
+      xStart = 1;
+      canvas->fillRect(xMove, yMove, 1, 16, lightBlendRGB565(0xBDB0, light));
+    }
+    if (matrix & 8)
+    {
+      canvas->fillRect(xMove, yMove+15, 16, 1, lightBlendRGB565(0xBDB0, light));
+      height -= 1;
+    }
+    if (matrix & 2)
+    {
+      canvas->fillRect(xMove, yMove, 16, 1, lightBlendRGB565(0xBDB0, light));
+      yStart += 1;
+      yMove += 1;
+    }
+    if (matrix & 4)
+    {
+      canvas->fillRect(xMove+15, yMove, 1, 16, lightBlendRGB565(0xBDB0, light));
+      width -= 1;
+    }
+
+
+
+    for (int16_t j = yStart; j < height; j++, yMove++)
+    {
+      idx = ((j << 4) + xStart) << 1;
+      for (int16_t i = xStart; i < width; i++)
       {
         uint16_t value = (bitmap[idx++]) | (bitmap[idx++] << 8);
         canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
       }
     }
+    
   }
 }
 
@@ -528,6 +596,7 @@ void drawTileMask(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int
 
   //  Serial.println("");
 }
+
 void drawTreeTileMask(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int16_t width, int16_t height, int light)
 {
   uint16_t idx = 0;
@@ -587,49 +656,4 @@ void drawTreeTileMask(int16_t xMove, int16_t yMove, const unsigned char *bitmap,
   }
 
   //  Serial.println("");
-}
-// Fast RGB565 pixel blending
-// Found in a pull request for the Adafruit framebuffer library. Clever!
-// https://github.com/tricorderproject/arducordermini/pull/1/files#diff-d22a481ade4dbb4e41acc4d7c77f683d
-uint16_t alphaBlendRGB565(uint32_t fg, uint32_t bg, uint8_t alpha)
-{
-  // Alpha converted from [0..255] to [0..31]
-  alpha = (alpha + 4) >> 3;
-
-  // Converts  0000000000000000rrrrrggggggbbbbb
-  //     into  00000gggggg00000rrrrr000000bbbbb
-  // with mask 00000111111000001111100000011111
-  // This is useful because it makes space for a parallel fixed-point multiply
-  bg = (bg | (bg << 16)) & 0b00000111111000001111100000011111;
-  fg = (fg | (fg << 16)) & 0b00000111111000001111100000011111;
-
-  // This implements the linear interpolation formula: result = bg * (1.0 - alpha) + fg * alpha
-  // This can be factorized into: result = bg + (fg - bg) * alpha
-  // alpha is in Q1.5 format, so 0.0 is represented by 0, and 1.0 is represented by 32
-  uint32_t result = (fg - bg) * alpha; // parallel fixed-point multiply of all components
-  result >>= 5;
-  result += bg;
-  result &= 0b00000111111000001111100000011111; // mask out fractional parts
-  return (uint16_t)((result >> 16) | result);   // contract result
-}
-
-uint16_t lightBlendRGB565(uint32_t fg, uint8_t alpha)
-{
-  // Alpha converted from [0..255] to [0..31]
-  alpha = (alpha + 4) >> 3;
-
-  // Converts  0000000000000000rrrrrggggggbbbbb
-  //     into  00000gggggg00000rrrrr000000bbbbb
-  // with mask 00000111111000001111100000011111
-  // This is useful because it makes space for a parallel fixed-point multiply
-
-  fg = (fg | (fg << 16)) & 0b00000111111000001111100000011111;
-
-  // This implements the linear interpolation formula: result = bg * (1.0 - alpha) + fg * alpha
-  // This can be factorized into: result = bg + (fg - bg) * alpha
-  // alpha is in Q1.5 format, so 0.0 is represented by 0, and 1.0 is represented by 32
-  uint32_t result = (fg)*alpha; // parallel fixed-point multiply of all components
-  result >>= 5;
-  result &= 0b00000111111000001111100000011111; // mask out fractional parts
-  return (uint16_t)((result >> 16) | result);   // contract result
 }

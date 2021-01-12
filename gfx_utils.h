@@ -10,7 +10,7 @@
 
 
 void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int8_t DIR = 1, int light = -1);
-void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light = -1);
+void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light = -1, uint8_t matrix = 0);
 void drawWaterTile(int16_t px, int16_t py, const unsigned char *bitmap, int light = -1, uint8_t waterLevel = 0, bool bOnSurface = false);
 
 void drawTileMask(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int light = -1);
@@ -42,8 +42,51 @@ void drawBackgroundImage(int16_t srcx, int16_t srcy, int16_t srcw, int16_t srch,
 #define ALPHA_88    224
 #define ALPHA_100   255
 
-uint16_t alphaBlendRGB565( uint32_t fg, uint32_t bg, uint8_t alpha );
-uint16_t lightBlendRGB565( uint32_t fg, uint8_t alpha );
+// Fast RGB565 pixel blending
+// Found in a pull request for the Adafruit framebuffer library. Clever!
+// https://github.com/tricorderproject/arducordermini/pull/1/files#diff-d22a481ade4dbb4e41acc4d7c77f683d
+inline uint16_t alphaBlendRGB565(uint32_t fg, uint32_t bg, uint8_t alpha)
+{
+  // Alpha converted from [0..255] to [0..31]
+  alpha = (alpha + 4) >> 3;
+
+  // Converts  0000000000000000rrrrrggggggbbbbb
+  //     into  00000gggggg00000rrrrr000000bbbbb
+  // with mask 00000111111000001111100000011111
+  // This is useful because it makes space for a parallel fixed-point multiply
+  bg = (bg | (bg << 16)) & 0b00000111111000001111100000011111;
+  fg = (fg | (fg << 16)) & 0b00000111111000001111100000011111;
+
+  // This implements the linear interpolation formula: result = bg * (1.0 - alpha) + fg * alpha
+  // This can be factorized into: result = bg + (fg - bg) * alpha
+  // alpha is in Q1.5 format, so 0.0 is represented by 0, and 1.0 is represented by 32
+  uint32_t result = (fg - bg) * alpha; // parallel fixed-point multiply of all components
+  result >>= 5;
+  result += bg;
+  result &= 0b00000111111000001111100000011111; // mask out fractional parts
+  return (uint16_t)((result >> 16) | result);   // contract result
+}
+
+inline uint16_t lightBlendRGB565(uint32_t fg, uint8_t alpha)
+{
+  // Alpha converted from [0..255] to [0..31]
+  alpha = (alpha + 4) >> 3;
+
+  // Converts  0000000000000000rrrrrggggggbbbbb
+  //     into  00000gggggg00000rrrrr000000bbbbb
+  // with mask 00000111111000001111100000011111
+  // This is useful because it makes space for a parallel fixed-point multiply
+
+  fg = (fg | (fg << 16)) & 0b00000111111000001111100000011111;
+
+  // This implements the linear interpolation formula: result = bg * (1.0 - alpha) + fg * alpha
+  // This can be factorized into: result = bg + (fg - bg) * alpha
+  // alpha is in Q1.5 format, so 0.0 is represented by 0, and 1.0 is represented by 32
+  uint32_t result = (fg)*alpha; // parallel fixed-point multiply of all components
+  result >>= 5;
+  result &= 0b00000111111000001111100000011111; // mask out fractional parts
+  return (uint16_t)((result >> 16) | result);   // contract result
+}
 
 
  /*
