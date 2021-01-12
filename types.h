@@ -156,8 +156,9 @@ typedef struct {
         uint8_t spriteVariation:2;
 
         uint8_t contour:4;
+        uint8_t light_hit:1;
 
-        uint8_t __spare:4;
+        uint8_t __spare:3;
 
       //AU TOTAL ON PEDS DEUX BITS....apres l'alignement nous fait perdre 1 byte...
 

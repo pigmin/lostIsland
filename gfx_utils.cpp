@@ -327,22 +327,22 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
     if (matrix & 1)
     {
       xStart = 1;
-      canvas->fillRect(xMove, yMove, 1, 16, 0xBDB0);
+      canvas->drawFastVLine(xMove, yMove, 16, 0xD652);
     }
     if (matrix & 8)
     {
-      canvas->fillRect(xMove, yMove+15, 16, 1, 0xBDB0);
+      canvas->drawFastHLine(xMove, yMove+15, 16, 0xD652);
       height -= 1;
     }
     if (matrix & 2)
     {
-      canvas->fillRect(xMove, yMove, 16, 1, 0xBDB0);
+      canvas->drawFastHLine(xMove, yMove, 16, 0xD652);
       yStart += 1;
       yMove += 1;
     }
     if (matrix & 4)
     {
-      canvas->fillRect(xMove+15, yMove, 1, 16, 0xBDB0);
+      canvas->drawFastVLine(xMove+15, yMove, 16, 0xD652);
       width -= 1;
     }
 
@@ -360,29 +360,29 @@ void drawTile(int16_t xMove, int16_t yMove, const unsigned char *bitmap, int lig
   }
   else
   {
+    uint16_t borderCol = lightBlendRGB565(0xD652, light);
+
     if (matrix & 1)
     {
       xStart = 1;
-      canvas->fillRect(xMove, yMove, 1, 16, lightBlendRGB565(0xBDB0, light));
+      canvas->drawFastVLine(xMove, yMove, 16, borderCol);
     }
     if (matrix & 8)
     {
-      canvas->fillRect(xMove, yMove+15, 16, 1, lightBlendRGB565(0xBDB0, light));
+      canvas->drawFastHLine(xMove, yMove+15, 16, borderCol);
       height -= 1;
     }
     if (matrix & 2)
     {
-      canvas->fillRect(xMove, yMove, 16, 1, lightBlendRGB565(0xBDB0, light));
+      canvas->drawFastHLine(xMove, yMove, 16, borderCol);
       yStart += 1;
       yMove += 1;
     }
     if (matrix & 4)
     {
-      canvas->fillRect(xMove+15, yMove, 1, 16, lightBlendRGB565(0xBDB0, light));
+      canvas->drawFastVLine(xMove+15, yMove, 16, borderCol);
       width -= 1;
     }
-
-
 
     for (int16_t j = yStart; j < height; j++, yMove++)
     {

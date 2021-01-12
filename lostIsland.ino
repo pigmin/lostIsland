@@ -1244,7 +1244,8 @@ void drawItems()
             if (((currentItem->worldX >= (worldMIN_X - 1)) && (currentItem->worldX <= (worldMAX_X + 1))) &&
                 ((currentItem->worldY >= (worldMIN_Y - 1)) && (currentItem->worldY <= (worldMAX_Y + 1))))
             {
-                drawItem(currentItem);
+                if (rayCastTo(Player.pos.worldX, Player.pos.worldY, currentItem->worldX, currentItem->worldY))
+                    drawItem(currentItem);
             }
         }
     }
@@ -1368,7 +1369,8 @@ void drawEnnemies()
             if (((currentEnnemy->worldX >= (worldMIN_X - 1)) && (currentEnnemy->worldX <= (worldMAX_X + 1))) &&
                 ((currentEnnemy->worldY >= (worldMIN_Y - 1)) && (currentEnnemy->worldY <= (worldMAX_Y + 1))))
             {
-                drawEnnemy(currentEnnemy);
+                if (rayCastTo(Player.pos.worldX, Player.pos.worldY, currentEnnemy->worldX, currentEnnemy->worldY))
+                    drawEnnemy(currentEnnemy);
             }
         }
     }
@@ -1440,6 +1442,18 @@ void drawTiles()
     int playerLightEndX = playerLightStartX + (PLAYER_LIGHT_MASK_WIDTH - 1);
     int playerLightEndY = playerLightStartY + (PLAYER_LIGHT_MASK_HEIGHT - 1);
 
+#ifdef USE_FOV
+    for (int wX = worldMIN_X; wX < worldMAX_X; wX++)
+    {
+            for (int wY = worldMIN_Y; wY < worldMAX_Y; wY++)
+            {
+                    TworldTile *brick = &WORLD[wY][wX];
+                    brick->light_hit = 0;
+            }
+    }
+    do_fov(Player.pos.worldX, Player.pos.worldY, 5);
+#endif
+
     for (int wX = worldMIN_X; wX < worldMAX_X; wX++)
     {
         int profondeurColonne = WORLD[HEADER_ROW][wX].id;
@@ -1455,6 +1469,8 @@ void drawTiles()
                     TworldTile *brick = &WORLD[wY][wX];
                     uint8_t value = brick->id;
 
+                    uint8_t light_hit = 0;
+
                     int curLight = MAX_LIGHT_INTENSITY;
                     // @todo gerer la nuit (dans ce cas pas de max light et ground.. ou la lune ?)
                     if (brick->opaque) // || wY > profondeurColonne)
@@ -1467,22 +1483,48 @@ void drawTiles()
 
                             curLight = max(curLight, 0);
                         }
-
-                        //if (wY <= (Player.pos.worldY + 2))
+#ifdef USE_FOV
+                        if (WORLD[wY][wX].light_hit)
                         {
-                            if (wX >= playerLightStartX && wX <= playerLightEndX && wY >= playerLightStartY && wY <= playerLightEndY)
+                            curLight = curLight + playerLightMask[wY - playerLightStartY][wX - playerLightStartX];
+                            if (wX < Player.pos.worldX)
+                                light_hit |= 4;
+                            else if (wX > Player.pos.worldX)
+                                light_hit |= 1;
+
+                            if (wY < Player.pos.worldY)
+                                light_hit |= 8;
+                            else if (wX < Player.pos.worldX)
+                                light_hit |= 2;
+                            
+                        }
+#else
+                        if (wX >= playerLightStartX && wX <= playerLightEndX && wY >= playerLightStartY && wY <= playerLightEndY)
+                        {
+                            //Raycast
+                            if (rayCastTo(Player.pos.worldX, Player.pos.worldY, wX, wY))
                             {
-                                //Raycast
-                                if (checkCollisionTo(Player.pos.worldX, Player.pos.worldY, wX, wY))
-                                    curLight = curLight + playerLightMask[wY - playerLightStartY][wX - playerLightStartX];
+                                curLight = curLight + playerLightMask[wY - playerLightStartY][wX - playerLightStartX];
+                                if (wX < Player.pos.worldX)
+                                    light_hit |= 4;
+                                else if (wX > Player.pos.worldX)
+                                    light_hit |= 1;
+
+                                if (wY < Player.pos.worldY)
+                                    light_hit |= 8;
+                                else if (wY > Player.pos.worldY)
+                                    light_hit |= 2;
+                                
                             }
                         }
+#endif                        
                         //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
                         curLight = min(curLight, MAX_LIGHT_INTENSITY);
                     }
 #ifdef DEBUG
                     curLight = MAX_LIGHT_INTENSITY;
 #endif
+                    uint8_t contour = (brick->contour & light_hit);
 
                     if (value == BLOCK_AIR)
                     {
@@ -1545,35 +1587,35 @@ void drawTiles()
                     }
                     else if (value == BLOCK_ROCK)
                     {
-                        drawTile(px, py, rock_empty.pixel_data, curLight, brick->contour);
+                        drawTile(px, py, rock_empty.pixel_data, curLight, contour);
                     }
                     else if (value == BLOCK_CHARBON) //
                     {
-                        drawTile(px, py, rock_charbon.pixel_data, curLight, brick->contour);
+                        drawTile(px, py, rock_charbon.pixel_data, curLight, contour);
                     }
                     else if (value == BLOCK_CUIVRE) //
                     {
-                        drawTile(px, py, rock_cuivre.pixel_data, curLight, brick->contour);
+                        drawTile(px, py, rock_cuivre.pixel_data, curLight, contour);
                     }
                     else if (value == BLOCK_FER) //
                     {
-                        drawTile(px, py, rock_fer.pixel_data, curLight, brick->contour);
+                        drawTile(px, py, rock_fer.pixel_data, curLight, contour);
                     }
                     else if (value == BLOCK_DIAMANT) //
                     {
-                        drawTile(px, py, rock_diamant.pixel_data, curLight, brick->contour);
+                        drawTile(px, py, rock_diamant.pixel_data, curLight, contour);
                     }
                     else if (value == BLOCK_JADE) //
                     {
-                        drawTile(px, py, rock_jade.pixel_data, curLight, brick->contour);
+                        drawTile(px, py, rock_jade.pixel_data, curLight, contour);
                     }
                     else if (value == BLOCK_OR) //
                     {
-                        drawTile(px, py, rock_or.pixel_data, curLight, brick->contour);
+                        drawTile(px, py, rock_or.pixel_data, curLight, contour);
                     }
                     else if (value == BLOCK_REDSTONE) //
                     {
-                        drawTile(px, py, rock_redstone.pixel_data, curLight, brick->contour);
+                        drawTile(px, py, rock_redstone.pixel_data, curLight, contour);
                     }
                     /*                    else if (value == 0x60) //
                     {
@@ -1590,7 +1632,7 @@ void drawTiles()
                     */
                     else
                     {
-                        drawTile(px, py, rock_empty.pixel_data, curLight, brick->contour);
+                        drawTile(px, py, rock_empty.pixel_data, curLight, contour);
                     }
                     /*
                     else if (WORLD[wY][wX].id == 'o') //16 coin
@@ -1650,6 +1692,8 @@ void drawTilesMasking()
                     TworldTile *brick = &WORLD[wY][wX];
                     uint8_t value = brick->id;
 
+                    uint8_t light_hit = 0;
+
                     int curLight = MAX_LIGHT_INTENSITY;
                     // @todo gerer la nuit (dans ce cas pas de max light et ground.. ou la lune ?)
                     if (brick->opaque) // || wY > profondeurColonne)
@@ -1663,13 +1707,12 @@ void drawTilesMasking()
                             curLight = max(curLight, 0);
                         }
 
-                        //if (wY <= (Player.pos.worldY + 2))
+                        if (wX >= playerLightStartX && wX <= playerLightEndX && wY >= playerLightStartY && wY <= playerLightEndY)
                         {
-                            if (wX >= playerLightStartX && wX <= playerLightEndX && wY >= playerLightStartY && wY <= playerLightEndY)
+                            //Raycast
+                            if (rayCastTo(Player.pos.worldX, Player.pos.worldY, wX, wY))
                             {
-                                //Raycast
-                                if (checkCollisionTo(Player.pos.worldX, Player.pos.worldY, wX, wY))
-                                    curLight = curLight + playerLightMask[wY - playerLightStartY][wX - playerLightStartX];
+                                curLight = curLight + playerLightMask[wY - playerLightStartY][wX - playerLightStartX];
                             }
                         }
                         //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
@@ -1932,110 +1975,72 @@ void pixelToWorld(int *pX, int *pY)
     int wY = *pY / 16;
 }
 
-/* Adapted from the code displayed at RogueBasin's "Bresenham's Line
- * Algorithm" article, this function checks for an unobstructed line
- * of sight between two locations using Bresenham's line algorithm to
- * draw a line from one point to the other. Returns true if there is
- * line of sight, false if there is no line of sight. */
-#define LOS_DISTANCE 9
-#if 0
-int los (int los_x_1, int los_y_1, int los_x_2, int
-         los_y_2, int level) {
-   int delta_x, delta_y, move_x, move_y, error;
- 
-   /* Calculate deltas. */
-   delta_x = abs (los_x_2 - los_x_1) << 1;
-   delta_y = abs (los_y_2 - los_y_1) << 1;
- 
-   /* Calculate signs. */
-   move_x = los_x_2 >= los_x_1 ? 1 : -1;
-   move_y = los_y_2 >= los_y_1 ? 1 : -1;
- 
-   /* There is an automatic line of sight, of course, between a
-    * location and the same location or directly adjacent
-    * locations. */
-   if (abs (los_x_2 - los_x_1) < 2 && abs (los_y_2 - los_y_1) < 2) {
-      /* Return. */
-      return true;
-   }
- 
-   /* Ensure that the line will not extend too long. */
-   if (((los_x_2 - los_x_1) * (los_x_2 - los_x_1))
-       + ((los_y_2 - los_y_1) * (los_y_2 -
-                                 los_y_1)) >
-       LOS_DISTANCE * LOS_DISTANCE) {
-      /* Return. */
-      return false;
-   }
- 
-   /* "Draw" the line, checking for obstructions. */
-   if (delta_x >= delta_y) {
-      /* Calculate the error factor, which may go below zero. */
-      error = delta_y - (delta_x >> 1);
- 
-      /* Search the line. */
-      while (los_x_1 != los_x_2) {
-         /* Check for an obstruction. If the obstruction can be "moved
-          * around", it isn't really an obstruction. */
-         if (feature_data(dungeon (los_x_1, los_y_1, level).feature).obstruction &&
-             (((los_y_1 - move_y >= 1
-                && los_y_1 - move_y <= DUNGEON_HEIGHT)
-               &&
-               feature_data (dungeon
-                                    (los_x_1, los_y_1 - move_y,
-                                     level).feature).obstruction)
-              || (los_y_1 != los_y_2 || !(delta_y)))) {
-            /* Return. */
-            return false;
-         }
- 
-         /* Update values. */
-         if (error > 0) {
-            if (error || (move_x > 0)) {
-               los_y_1 += move_y;
-               error -= delta_x;
+#ifdef USE_FOV
+static int multipliers[4][8] = {
+    {1, 0, 0, -1, -1, 0, 0, 1},
+    {0, 1, -1, 0, 0, -1, 1, 0},
+    {0, 1, 1, 0, 0, -1, -1, 0},
+    {1, 0, 0, 1, -1, 0, 0, -1}
+};
+
+inline void cast_light(int x, int y, int radius, int row, float start_slope, float end_slope, int xx, int xy, int yx, int yy) {
+    if (start_slope < end_slope) {
+        return;
+    }
+    float next_start_slope = start_slope;
+    int radius2 = radius * radius;
+    for (int i = row; i <= radius; i++) {
+        bool blocked = false;
+        for (int dx = -i, dy = -i; dx <= 0; dx++) {
+            float l_slope = (dx - 0.5) / (dy + 0.5);
+            float r_slope = (dx + 0.5) / (dy - 0.5);
+            if (start_slope < r_slope) {
+                continue;
+            } else if (end_slope > l_slope) {
+                break;
             }
-         }
-         los_x_1 += move_x;
-         error += delta_y;
-      }
-   }
-   else {
-      /* Calculate the error factor, which may go below zero. */
-      error = delta_x - (delta_y >> 1);
- 
-      /* Search the line. */
-      while (los_y_1 != los_y_2) {
-         /* Check for an obstruction. If the obstruction can be "moved
-          * around", it isn't really an obstruction. */
-         if (feature_data
-             (dungeon (los_x_1, los_y_1, level).feature).obstruction
-             &&
-             (((los_x_1 - move_x >= 1
-                && los_x_1 - move_x <= DUNGEON_WIDTH)
-               &&
-               feature_data (dungeon
-                                    (los_x_1 - move_x, los_y_1,
-                                     level).feature).obstruction)
-              || (los_x_1 != los_x_2 || !(delta_x)))) {
-            /* Return. */
-            return false;
-         }
- 
-         /* Update values. */
-         if (error > 0) {
-            if (error || (move_y > 0)) {
-               los_x_1 += move_x;
-               error -= delta_y;
+
+            int sax = dx * xx + dy * xy;
+            int say = dx * yx + dy * yy;
+            if ((sax < 0 && (int)abs(sax) > x) ||
+                    (say < 0 && (int)abs(say) > y)) {
+                continue;
             }
-         }
-         los_y_1 += move_y;
-         error += delta_x;
-      }
-   }
- 
-   /* Return. */
-   return true;
+            int ax = x + sax;
+            int ay = y + say;
+            if (ax >= WORLD_WIDTH || ay >= WORLD_HEIGHT) {
+                continue;
+            }
+
+            if ((int)(dx * dx + dy * dy) < radius2) {
+                WORLD[ay][ax].light_hit = 1;
+            }
+
+            if (blocked) {
+                if (!WORLD[ay][ax].traversable) {
+                    next_start_slope = r_slope;
+                    continue;
+                } else {
+                    blocked = false;
+                    start_slope = next_start_slope;
+                }
+            } else if (!WORLD[ay][ax].traversable) {
+                blocked = true;
+                next_start_slope = r_slope;
+                cast_light(x, y, radius, i + 1, start_slope, l_slope, xx, xy, yx, yy);
+            }
+        }
+        if (blocked) {
+            break;
+        }
+    }
+}
+
+void do_fov(int x, int y, int radius) {
+    for (int i = 0; i < 8; i++) {
+        cast_light(x, y, radius, 1, 1.0, 0.0, multipliers[0][i],
+                multipliers[1][i], multipliers[2][i], multipliers[3][i]);
+    }
 }
 #endif
 
@@ -2047,7 +2052,7 @@ int los (int los_x_1, int los_y_1, int los_x_2, int
  *                            *
  * It has the monsters x and y*
  * coords as parameters       */
-bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y)
+inline bool rayCastTo(int origin_x, int origin_y, int dest_x, int dest_y)
 {
     int t, x, y, abs_delta_x, abs_delta_y, sign_x, sign_y, delta_x, delta_y;
 
@@ -2105,7 +2110,7 @@ bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y)
             }
             /* keep looping until the monster's sight is blocked *
        * by an object at the updated x,y coord             */
-        } while (WORLD[y][x].traversable == true);
+        } while (WORLD[y][x].traversable);
 
         /* NOTE: sight_blocked is a function that returns true      *
        * if an object at the x,y coord. would block the monster's *
@@ -2132,10 +2137,11 @@ bool checkCollisionTo(int origin_x, int origin_y, int dest_x, int dest_y)
             {
                 return true;
             }
-        } while (WORLD[y][x].traversable == true);
+        } while (WORLD[y][x].traversable);
         return false;
     }
 }
+
 
 void updatePlayerWorldCoords()
 {
@@ -3740,7 +3746,7 @@ void loop()
 
     //elapsedTime = millis() - now;
 
-    if (lastFrameDurationMs > 37 && (_old_lastFrameDurationMs != lastFrameDurationMs))
+    if (lastFrameDurationMs > 30 && (_old_lastFrameDurationMs != lastFrameDurationMs))
     {
         Serial.printf("LFD:%d\n", lastFrameDurationMs);
         _old_lastFrameDurationMs = lastFrameDurationMs;

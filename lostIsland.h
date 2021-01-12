@@ -146,7 +146,7 @@ void drawTiles();
 void drawParticles();
 void drawWorld();
 void pixelToWorld(int16_t *pX, int16_t *pY);
-bool checkCollisionTo(int16_t origin_x, int16_t origin_y, int16_t dest_x, int16_t dest_y);
+bool rayCastTo(int16_t origin_x, int16_t origin_y, int16_t dest_x, int16_t dest_y);
 void checkPlayerCollisionsEntities();
 void updatePlayer();
 void updateEnnemies();
