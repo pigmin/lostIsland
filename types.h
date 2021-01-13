@@ -12,11 +12,11 @@
 
 typedef struct TPos
 {
-  int pX, pY;
+  float pX, pY;
   int worldX, worldY;
-  int speedX, speedY;
+  float speedX, speedY;
 
-  int newX, newY;
+  float newX, newY;
 
   int8_t direction;
 
@@ -52,22 +52,26 @@ typedef struct TPlayer
     int     speedY;
   } FX;
 
+  bool bJumping;
+  float jumpCounter;
+  bool bDoubleJumping;
 
+  bool bOnGround;
+  float onGroundCounter;
 
-  int cible_wX, cible_wY;
-  int cible_pX, cible_pY;
+  bool bOnLeftWall;
+  bool bOnRightWall;
+  float onWallCounter;
 
   bool bDying;
-  bool bJumping;
-  uint8_t jumpCounter;
   bool bFalling;
   bool bWalking;
-  uint8_t waterLevel;
-  bool bOnGround;
+  bool bMovingUpDown;
   bool bLanding; //On vient de tomber a pleine vitesse de falling
-  uint8_t onGroundCounter;
   bool bTouched;
-  bool bDoubleJumping;
+  float fTouchCountDown;
+
+  uint8_t waterLevel;
   bool bSplashIn;
   bool bSplashOut;
   bool bUnderWater;
@@ -75,8 +79,9 @@ typedef struct TPlayer
   bool bWantWalk;
   bool bWantJump;
   bool bWantDoubleJump;
-  uint8_t iTouchCountDown;
 
+  int cible_wX, cible_wY;
+  int cible_pX, cible_pY;
 
   uint8_t  currentItemSelected;
   TInventoryItem  quick_inventory[MAX_QUICK_ITEMS];
@@ -112,7 +117,7 @@ typedef struct Enemy
   bool bWalking;
   bool bOnGround;
   bool bTouched;
-  int iTouchCountDown;
+  int fTouchCountDown;
 
   bool bIsActive;
   int bIsAlive;   //de 0 a 127 : zombi, apres 127 vivant
@@ -156,9 +161,9 @@ typedef struct {
         uint8_t spriteVariation:2;
 
         uint8_t contour:4;
+#ifdef USE_FOV
         uint8_t light_hit:1;
-
-        uint8_t __spare:3;
+#endif
 
       //AU TOTAL ON PEDS DEUX BITS....apres l'alignement nous fait perdre 1 byte...
 

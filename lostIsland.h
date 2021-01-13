@@ -10,6 +10,10 @@
 #include "sprites.h"
 #include "block_defines.h"
 
+float fElapsedTime;
+uint32_t __now;
+uint32_t lastTime;
+
 uint8_t frameRate;
 uint16_t frameCount;
 uint8_t eachFrameMillis;
@@ -68,8 +72,8 @@ int worldMIN_Y = 0;
 int worldMAX_Y = 0;
 int currentOffset_Y = 0;
 
-int counterActionB = 0;
-int coolDownActionB = 0;
+float counterActionB = 0;
+float coolDownActionB = 0;
 
 uint16_t lastRowErosion = 0;
 uint16_t lastColErosion = 0;

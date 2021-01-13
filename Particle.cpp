@@ -6,6 +6,7 @@
  *      
  */
 
+#include <Arduino.h>
 #include "defines.h"
 #include "Particle.h"
 #include <stdlib.h>
@@ -13,6 +14,7 @@
 #include "gfx_utils.h"
 #include "WaterSim.h"
 
+extern float  fElapsedTime;
 
 Particles::Particles(){}
 Particles::~Particles(){}
@@ -47,8 +49,8 @@ void Particles::moveParticles(int cameraX, int cameraY)
     // This is what deccelerates the particles.
     for (i = 0; i < activeParticles; i++)
     {
-        particles[i].x += particles[i].velX / 10;    // calculate true velocity
-        particles[i].y += particles[i].velY / 10;
+        particles[i].pX += particles[i].velX * fElapsedTime;    // calculate true velocity
+        particles[i].pY += particles[i].velY * fElapsedTime;
 
         if (particles[i].life > 0) {
             particles[i].life = particles[i].life - 1;
@@ -56,30 +58,21 @@ void Particles::moveParticles(int cameraX, int cameraY)
 
         if (particles[i].weight > 0)
         {
-            if (particles[i].velX != 0) {
-                particles[i].velX *= 0.85f;        // subtract from positive numbers
-            }             
-            if (particles[i].velY < FPS)
-                particles[i].velY = particles[i].velY + 3 * particles[i].weight;
+            if (particles[i].velX != 0)
+			    particles[i].velX += -3.0f * particles[i].velX * fElapsedTime;
+			
+            if (fabs(particles[i].velX) < 0.01f)
+				particles[i].velX = 0.0f; 
+
+            if (particles[i].velY < 600)
+                particles[i].velY = particles[i].velY + 75 * particles[i].weight * fElapsedTime;
             else {
                 if (particles[i].velY != 0) {
-                    particles[i].velY *= 0.85f;        // subtract from positive numbers
+                    particles[i].velY += -3.0f * particles[i].velY * fElapsedTime;
                 }
             }
         }
-        else if (particles[i].weight < 0)
-        {
-            if (particles[i].velX != 0) {
-                particles[i].velX *= 0.85f;        // subtract from positive numbers
-            }             
-            if (particles[i].velY > FPS)
-                particles[i].velY = particles[i].velY + 3*particles[i].weight;
-            else {
-                if (particles[i].velY != 0) {
-                    particles[i].velY *= 0.85f;        // subtract from positive numbers
-                }
-            }
-        }
+       
 
         if (particles[i].life == 0) {
              delParticle(i);
@@ -89,8 +82,8 @@ void Particles::moveParticles(int cameraX, int cameraY)
             i--; 
         }
         else {
-            int px = particles[i].x - cameraX;
-            int py = particles[i].y - cameraY;
+            float px = particles[i].pX - cameraX;
+            float py = particles[i].pY - cameraY;
             // and delete stopped particles from the list.
             // perhaps I should move this to up about 15 lines, so that stopped
             //  pixels can be deleted from the sketch.
@@ -116,15 +109,15 @@ void Particles::moveParticles(int cameraX, int cameraY)
 }
 
 // creates num_parts particles at x,y with random velocities
-void Particles::createExplosion(int x, int y, int num_parts, int xspeed, int yspeed, uint16_t color, uint16_t color2, int life)
+void Particles::createExplosion(float x, float y, int num_parts, float xspeed, float yspeed, uint16_t color, uint16_t color2, int life)
 {
     int i;
     Particle particle;
     
     for (i = 0; i < num_parts; i++)
     {
-        particle.x = x;
-        particle.y = y;
+        particle.pX = x;
+        particle.pY = y;
         particle.w = 2*random(1,2);
         particle.h = particle.w;
         particle.life = life;
@@ -140,7 +133,7 @@ void Particles::createExplosion(int x, int y, int num_parts, int xspeed, int ysp
 
 
 // creates num_parts particles at x,y with random velocities
-void Particles::createDirectionalExplosion(int x, int y, int num_parts, uint8_t size, uint8_t direction, uint16_t color, uint16_t color2, int life)
+void Particles::createDirectionalExplosion(float x, float y, int num_parts, uint8_t size, uint8_t direction, uint16_t color, uint16_t color2, int life)
 {
     int i;
     Particle particle;
@@ -162,8 +155,8 @@ void Particles::createDirectionalExplosion(int x, int y, int num_parts, uint8_t 
 
     for (i = 0; i < num_parts; i++)
     {
-        particle.x = x;
-        particle.y = y;
+        particle.pX = x;
+        particle.pY = y;
         particle.w = random(2, size);
         particle.h = particle.w;
         particle.life = life;
@@ -178,15 +171,15 @@ void Particles::createDirectionalExplosion(int x, int y, int num_parts, uint8_t 
 }
 
 // creates num_parts particles at x,y with random velocities
-void Particles::createBodyExplosion(int x, int y, int num_parts, uint16_t color, uint16_t color2, int life)
+void Particles::createBodyExplosion(float x, float y, int num_parts, uint16_t color, uint16_t color2, int life)
 {
     int i;
     Particle particle;
     
     for (i = 0; i < num_parts; i++)
     {
-        particle.x = x + 8;
-        particle.y = y + 8;
+        particle.pX = x + 8;
+        particle.pY = y + 8;
         particle.w = 2*random(1,2);
         particle.h = particle.w;
         particle.life = life;
@@ -202,7 +195,7 @@ void Particles::createBodyExplosion(int x, int y, int num_parts, uint16_t color,
 
 
 // creates num_parts particles at x,y with random velocities
-void Particles::createLandingDust(int x, int y, int num_parts, int xspeed, int yspeed, int life)
+void Particles::createLandingDust(float x, float y, int num_parts, float xspeed, float yspeed, int life)
 {
     int i;
     Particle particle;
@@ -210,8 +203,8 @@ void Particles::createLandingDust(int x, int y, int num_parts, int xspeed, int y
     for (i = 0; i < num_parts; i++)
     {
         particle.w = 2;
-        particle.x = x + random(-6,6);
-        particle.y = y - random(particle.w, particle.w + 4);
+        particle.pX = x + random(-6,6);
+        particle.pY = y - random(particle.w, particle.w + 4);
         particle.h = particle.w;
         particle.life = random(FPS, FPS>>2);
         particle.weight = 0;

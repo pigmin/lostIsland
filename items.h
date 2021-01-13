@@ -31,14 +31,15 @@ typedef struct Titem {
     bool bIsActive;
     int bIsAlive;   //de 0 a 127 : zombi, apres 127 vivant
     int iSpawning;
-    int x;
-    int y;
-    int new_x;
-    int new_y;
+    float pX;
+    float pY;
+    float newX;
+    float newY;
+    float speedX;
+    float speedY;
+
     int current_framerate;
     int anim_frame;
-    int speed_x;
-    int speed_y;
 } Titem;
 
 

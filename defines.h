@@ -8,15 +8,15 @@
 #define FRAME_DURATION (1/FPS)
 #define FRAME_DURATION_8B (255/FPS)
 
-#define CAMERA_FOLLOW_X_SPEED   4
-#define CAMERA_FOLLOW_Y_SPEED   10
+#define CAMERA_FOLLOW_X_SPEED   (255*4)
+#define CAMERA_FOLLOW_Y_SPEED   (255*10)
 
 // @todo passer en time based et non frame based
 // @todo idem pour les speed et anims frames des sprites...
-#define FRAMES_LOCK_ACTION_B int(225 / (1000 / FPS))
-#define FRAMES_ANIM_ACTION_B int(412 / (1000 / FPS))
-#define FRAMES_ACTION_B int(1500 / (1000 / FPS))
-#define FRAMES_COOLDOWN_B int(750 / (1000 / FPS))
+#define TIME_LOCK_ACTION_B 0.225f
+#define TIME_ANIM_ACTION_B 0.4f
+#define TIME_ACTION_B 1.5f
+#define TIME_COOLDOWN_B 0.75f
 
 #define HALF_SCREEN_WIDTH (ARCADA_TFT_WIDTH>>1)
 #define HALF_SCREEN_HEIGHT (ARCADA_TFT_HEIGHT>>1)
@@ -40,24 +40,29 @@
 
 #define BASE_X_PLAYER 3
 
-#define FALLING_SPEED 1
-#define WALKING_SPEED 2
-#define RUNNING_SPEED 2
+#define FALLING_SPEED 625
+#define WALKING_SPEED 1000
+#define RUNNING_SPEED 1250
 //Nombre de frames ou on considere le player comme encore sur le sol (pour les air jumps)
-#define FRAMES_GROUND_LATENCY   (FPS/6)
+#define TIME_GROUND_LATENCY   0.15f
 //On se rapelle de la demande de saut pendant x frames (pour sauter meme si on touchait pas encore le sol mais juste apres oui...)
-#define FRAMES_JUMP_LATENCY   (FPS/6)
+#define TIME_JUMP_LATENCY   0.15f
 //On autorise le double jump apres x frames suivant le jump classique
-#define FRAMES_DOUBLE_JUMP_DETECTION    (FPS/2)
+#define TIME_DOUBLE_JUMP_DETECTION    0.5f
+
+//Nombre de frames ou on considere le player comme encore sur le mur (pour les air jumps)
+#define TIME_WALL_LATENCY   0.15f
+
 
 //Au dela de cette vitesse de chute on fera de la poussiere au sol
 #define SPEED_Y_LANDING   8
 
-#define MAX_SPEED_X 4
-#define MAX_SPEED_Y 15
+#define MAX_SPEED_X 100
+#define MAX_SPEED_Y 375
 
-#define JUMP_SPEED 10
-#define DOUBLE_JUMP_SPEED 8
+//Independants de elapsedtime
+#define JUMP_SPEED 250
+#define DOUBLE_JUMP_SPEED 200
 
 #define DEFAULT_ITEM_SHAKE_AMOUNT   6
 #define CAMERA_KILL_ENNEMY_AMOUNT   5

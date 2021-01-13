@@ -16,14 +16,15 @@
         bool bIsActive;
         int bIsAlive;   //de 0 a 127 : zombi, apres 127 vivant
         int iSpawning;
-        int x;
-        int y;
-        int new_x;
-        int new_y;
+        float pX;
+        float pY;
+        float newX;
+        float newY;
+        float speedX;
+        float speedY;
+
         int current_framerate;
         int anim_frame;
-        int speed_x;
-        int speed_y;
 
         int health;
         int max_health;
@@ -38,15 +39,15 @@
     Tennemy ENNEMIES[MAX_ENNEMIES];
 
     #define SPIDER_ENNEMY           's'
-    #define SPIDER_WALKING_SPEED    3
+    #define SPIDER_WALKING_SPEED    75
     #define SPIDER_HEALTH       10
 
     #define ZOMBI_ENNEMY        'z'
-    #define ZOMBI_WALKING_SPEED    1
+    #define ZOMBI_WALKING_SPEED    25
     #define ZOMBI_HEALTH       30
 
     #define SKEL_ENNEMY         'k'
-    #define SKEL_WALKING_SPEED    2
+    #define SKEL_WALKING_SPEED    50
     #define SKEL_HEALTH       60
     
 #endif

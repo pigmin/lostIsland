@@ -23,8 +23,8 @@
  * one moveParticles() at a time. */
 class Particle {
     public:
-        int x;
-        int y;
+        float pX;
+        float pY;
         uint8_t w;
         uint8_t h;
         int8_t weight;
@@ -40,11 +40,11 @@ class Particles {
         Particles();
         ~Particles();
         void moveParticles(int cameraX = 0, int cameraY = 0);
-        void createExplosion(int x, int y, int num_parts = 8, int xspeed = 1, int yspeed = 1, uint16_t color = 0xFFFF, uint16_t color2 = 0xFFFF, int life = -1);
-        void createDirectionalExplosion(int x, int y, int num_parts = 8, uint8_t size = 1, uint8_t direction = 0xFF, uint16_t color = 0xFFFF, uint16_t color2 = 0xFFFF, int life = -1);
-        void createBodyExplosion(int x, int y, int num_parts = 8, uint16_t color = 0xFFFF, uint16_t color2 = 0xFFFF, int life = -1);
+        void createExplosion(float x, float y, int num_parts = 8, float xspeed = 1, float yspeed = 1, uint16_t color = 0xFFFF, uint16_t color2 = 0xFFFF, int life = -1);
+        void createDirectionalExplosion(float x, float y, int num_parts = 8, uint8_t size = 1, uint8_t direction = 0xFF, uint16_t color = 0xFFFF, uint16_t color2 = 0xFFFF, int life = -1);
+        void createBodyExplosion(float x, float y, int num_parts = 8, uint16_t color = 0xFFFF, uint16_t color2 = 0xFFFF, int life = -1);
 
-        void createLandingDust(int x, int y, int num_parts = 8, int xspeed = 1, int yspeed = 1, int life = -1);
+        void createLandingDust(float x, float y, int num_parts = 8, float xspeed = 1, float yspeed = 1, int life = -1);
         int getActiveParticles();
         void clearParticles();
         Particle particles[MAX_PARTICLES];

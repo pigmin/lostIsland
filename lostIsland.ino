@@ -151,21 +151,21 @@ bool everyXFrames(uint8_t frames)
 
 bool nextFrame()
 {
-    long now = millis();
+    __now = millis();
     uint8_t remaining;
 
     // post render
     if (post_render)
     {
-        lastFrameDurationMs = now - lastFrameStart;
+        lastFrameDurationMs = __now - lastFrameStart;
         frameCount++;
         post_render = false;
     }
 
     // if it's not time for the next frame yet
-    if (now < nextFrameStart)
+    if (__now < nextFrameStart)
     {
-        remaining = nextFrameStart - now;
+        remaining = nextFrameStart - __now;
         // if we have more than 1ms to spare, lets sleep
         // we should be woken up by timer0 every 1ms, so this should be ok
         //  if (remaining > 1)
@@ -179,8 +179,8 @@ bool nextFrame()
     // running a slow render we would constnatly be behind the clock
     // keep an eye on this and see how it works.  If it works well the
     // lastFrameStart variable could be eliminated completely
-    nextFrameStart = now + eachFrameMillis;
-    lastFrameStart = now;
+    nextFrameStart = __now + eachFrameMillis;
+    lastFrameStart = __now;
     post_render = true;
     return post_render;
 }
@@ -254,6 +254,7 @@ void displayText(char *text, int16_t x, int16_t y, uint16_t color = ARCADA_WHITE
 void setup()
 {
     //while (!Serial);
+    fElapsedTime = 0.0f;
 
     Serial.begin(115200);
 
@@ -371,10 +372,13 @@ void initPlayer()
     Player.bFalling = false;
     Player.bWalking = false;
     Player.bTouched = false;
-    Player.iTouchCountDown = 0;
+    Player.fTouchCountDown = 0;
     Player.bOnGround = false;
     Player.bLanding = false;
     Player.onGroundCounter = 0;
+    Player.bOnLeftWall = false;
+    Player.bOnRightWall = false;
+    Player.onWallCounter = 0;
     Player.bUnderWater = false;
     Player.bSplashIn = false;
     Player.bSplashOut = false;
@@ -473,7 +477,7 @@ void set_dying()
         //stopMusic();
         //    sndPlayerCanal1.play(AudioSamplePlayerdeath);
         Player.bDying = true;
-        Player.iTouchCountDown = 0;
+        Player.fTouchCountDown = 0;
         Player.bTouched = false;
         jumpPhase = 0;
         count_player_die = 0;
@@ -533,7 +537,7 @@ void set_splash_fx(bool bSplashIn = true)
 void set_touched()
 {
     // @todo : gerer les type de monstres
-    if (Player.iTouchCountDown == 0)
+    if (Player.fTouchCountDown == 0)
     {
         Player.health -= 10;
 
@@ -541,11 +545,11 @@ void set_touched()
         {
             //    sndPlayerCanal3.play(AudioSampleSmb_pipe);
             Player.bTouched = true;
-            Player.iTouchCountDown = 2 * FPS;
+            Player.fTouchCountDown = 2;
             //Player.anim_frame = PLAYER_FRAME_TOUCH_1;
             //Player.current_framerate = 0;
         }
-        else if (Player.iTouchCountDown == 0)
+        else if (Player.fTouchCountDown == 0)
         {
             set_dying();
         }
@@ -559,7 +563,7 @@ void set_wining()
         Player.stateAnim = PLAYER_STATE_WIN;
 
         //playMusic(FlagpoleFanfare);
-        Player.iTouchCountDown = 0;
+        Player.fTouchCountDown = 0;
         Player.bTouched = false;
         bWin = true;
         jumpPhase = 0;
@@ -588,6 +592,9 @@ void postInitWorld()
         wY--;
     } while (wY > 0 && hauteurMaxBackground == 0);
     Serial.printf("hauteurMaxBackground:%d\n", hauteurMaxBackground);
+
+    //Reset times
+    lastTime = __now = millis();
 
     //Musique
     StopMOD();
@@ -918,13 +925,13 @@ void initWorld()
         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
         ENNEMIES[NB_WORLD_ENNEMIES].worldX = posX;
         ENNEMIES[NB_WORLD_ENNEMIES].worldY = hauteur - 1;
-        ENNEMIES[NB_WORLD_ENNEMIES].x = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
-        ENNEMIES[NB_WORLD_ENNEMIES].y = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
-        ENNEMIES[NB_WORLD_ENNEMIES].new_x = 0;
-        ENNEMIES[NB_WORLD_ENNEMIES].new_y = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].pX = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
+        ENNEMIES[NB_WORLD_ENNEMIES].pY = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
+        ENNEMIES[NB_WORLD_ENNEMIES].newX = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].newY = 0;
         ENNEMIES[NB_WORLD_ENNEMIES].type = SKEL_ENNEMY;
-        ENNEMIES[NB_WORLD_ENNEMIES].speed_x = SKEL_WALKING_SPEED;
-        ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].speedX = SKEL_WALKING_SPEED;
+        ENNEMIES[NB_WORLD_ENNEMIES].speedY = 0;
         ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 4;
         ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 3;
 
@@ -960,13 +967,13 @@ void initWorld()
         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
         ENNEMIES[NB_WORLD_ENNEMIES].worldX = posX;
         ENNEMIES[NB_WORLD_ENNEMIES].worldY = hauteur - 1;
-        ENNEMIES[NB_WORLD_ENNEMIES].x = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
-        ENNEMIES[NB_WORLD_ENNEMIES].y = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
-        ENNEMIES[NB_WORLD_ENNEMIES].new_x = 0;
-        ENNEMIES[NB_WORLD_ENNEMIES].new_y = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].pX = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
+        ENNEMIES[NB_WORLD_ENNEMIES].pY = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
+        ENNEMIES[NB_WORLD_ENNEMIES].newX = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].newY = 0;
         ENNEMIES[NB_WORLD_ENNEMIES].type = ZOMBI_ENNEMY;
-        ENNEMIES[NB_WORLD_ENNEMIES].speed_x = ZOMBI_WALKING_SPEED;
-        ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].speedX = ZOMBI_WALKING_SPEED;
+        ENNEMIES[NB_WORLD_ENNEMIES].speedY = 0;
         ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 4;
         ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 3;
 
@@ -999,13 +1006,13 @@ void initWorld()
                         ENNEMIES[NB_WORLD_ENNEMIES].bIsAlive = 255;
                         ENNEMIES[NB_WORLD_ENNEMIES].worldX = wX;
                         ENNEMIES[NB_WORLD_ENNEMIES].worldY = wY;
-                        ENNEMIES[NB_WORLD_ENNEMIES].x = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
-                        ENNEMIES[NB_WORLD_ENNEMIES].y = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
-                        ENNEMIES[NB_WORLD_ENNEMIES].new_x = 0;
-                        ENNEMIES[NB_WORLD_ENNEMIES].new_y = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].pX = ENNEMIES[NB_WORLD_ENNEMIES].worldX * 16;
+                        ENNEMIES[NB_WORLD_ENNEMIES].pY = ENNEMIES[NB_WORLD_ENNEMIES].worldY * 16;
+                        ENNEMIES[NB_WORLD_ENNEMIES].newX = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].newY = 0;
                         ENNEMIES[NB_WORLD_ENNEMIES].type = SPIDER_ENNEMY;
-                        ENNEMIES[NB_WORLD_ENNEMIES].speed_x = SPIDER_WALKING_SPEED;
-                        ENNEMIES[NB_WORLD_ENNEMIES].speed_y = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].speedX = SPIDER_WALKING_SPEED;
+                        ENNEMIES[NB_WORLD_ENNEMIES].speedY = 0;
                         ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 2;
                         ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 2;
 
@@ -1041,12 +1048,12 @@ void initWorld()
 
 void drawPlayer()
 {
-    if (Player.iTouchCountDown > 0)
+    if (Player.fTouchCountDown > 0)
     {
-        Player.iTouchCountDown--;
+        Player.fTouchCountDown -= fElapsedTime;
 
-        if ((Player.iTouchCountDown % 2) == 0)
-            return;
+        //if (fmod(Player.fTouchCountDown, 2) == 0)
+          //  return;
     }
 
     switch (Player.stateAnim)
@@ -1133,11 +1140,11 @@ void createDropFrom(int16_t wX, int16_t wY, uint8_t type)
 
     ITEMS[CURRENT_QUEUE_ITEMS].worldX = wX;
     ITEMS[CURRENT_QUEUE_ITEMS].worldY = wY;
-    ITEMS[CURRENT_QUEUE_ITEMS].x = wX * 16;
-    ITEMS[CURRENT_QUEUE_ITEMS].y = wY * 16;
+    ITEMS[CURRENT_QUEUE_ITEMS].pX = wX * 16;
+    ITEMS[CURRENT_QUEUE_ITEMS].pY = wY * 16;
     ITEMS[CURRENT_QUEUE_ITEMS].type = type;
-    ITEMS[CURRENT_QUEUE_ITEMS].speed_x = 0;
-    ITEMS[CURRENT_QUEUE_ITEMS].speed_y = 0;
+    ITEMS[CURRENT_QUEUE_ITEMS].speedX = 0;
+    ITEMS[CURRENT_QUEUE_ITEMS].speedY = 0;
     ITEMS[CURRENT_QUEUE_ITEMS].max_frames = 1;
     ITEMS[CURRENT_QUEUE_ITEMS].nb_anim_frames = 0;
 
@@ -1182,14 +1189,14 @@ void drawItem(Titem *currentItem)
         currentItem->bIsAlive -= 4;
     }
 
-    int px = currentItem->x - cameraX;
-    int py = currentItem->y - cameraY;
+    int px = currentItem->pX - cameraX;
+    int py = currentItem->pY - cameraY;
 
     /*
         /*    if (currentItem->iSpawning > 0)
     {
       int tmpH = 16 - (currentItem->iSpawning / 2);
-      drawSprite(px, (currentItem->y ) + (16 - tmpH), mushroom_16x16.width, tmpH, mushroom_16x16.pixel_data, Player.pos.direction);
+      drawSprite(px, (currentItem->pY ) + (16 - tmpH), mushroom_16x16.width, tmpH, mushroom_16x16.pixel_data, Player.pos.direction);
     }
     else
 
@@ -1293,8 +1300,8 @@ void drawEnnemy(Tennemy *currentEnnemy)
         currentEnnemy->bIsAlive -= 4;
     }
 
-    int px = currentEnnemy->x - cameraX;
-    int py = currentEnnemy->y - cameraY;
+    int px = currentEnnemy->pX - cameraX;
+    int py = currentEnnemy->pY - cameraY;
     //Recentrage
     //px -= 4;
     if (px < ARCADA_TFT_WIDTH && px > -16 && py < ARCADA_TFT_HEIGHT && py > -16)
@@ -1316,7 +1323,7 @@ void drawEnnemy(Tennemy *currentEnnemy)
         }
         case ZOMBI_ENNEMY:
         {
-            int DIR = currentEnnemy->speed_x > 0 ? 1 : -1;
+            int DIR = currentEnnemy->speedX > 0 ? 1 : -1;
             switch (currentEnnemy->anim_frame)
             {
             case 1:
@@ -1333,7 +1340,7 @@ void drawEnnemy(Tennemy *currentEnnemy)
         }
         case SKEL_ENNEMY:
         {
-            int DIR = currentEnnemy->speed_x > 0 ? 1 : -1;
+            int DIR = currentEnnemy->speedX > 0 ? 1 : -1;
             switch (currentEnnemy->anim_frame)
             {
             case 1:
@@ -1750,8 +1757,8 @@ void drawParticles()
     for (i = 0; i < parts.getActiveParticles(); i++)
     {
         int x, y, velX, velY;
-        x = parts.particles[i].x - cameraX;
-        y = parts.particles[i].y - cameraY;
+        x = parts.particles[i].pX - cameraX;
+        y = parts.particles[i].pY - cameraY;
         /*  velX = parts.particles[i].velX;
     velY = parts.particles[i].velY;
     
@@ -1828,8 +1835,8 @@ void debugInfos()
             if ((currentEnnemy->worldX >= worldMIN_X - 1) && (currentEnnemy->worldX <= worldMAX_X + 1) && (currentEnnemy->worldY >= worldMIN_Y - 1) && (currentEnnemy->worldY <= worldMAX_Y + 1))
             {
 
-                int px = currentEnnemy->x - cameraX;
-                int py = currentEnnemy->y - cameraY;
+                int px = currentEnnemy->pX - cameraX;
+                int py = currentEnnemy->pY - cameraY;
 
                 canvas->drawRect(px, py, 16, 16, ARCADA_RED);
             }
@@ -1846,7 +1853,7 @@ void drawEffects()
         {
             //Test action pour le sprite, pour l'instant la pioche
             // drawSprite(currentTileTarget.pX, currentTileTarget.pY, pioche.width, pioche.height, pioche.pixel_data, Player.pos.direction);
-            if ((counterActionB % FRAMES_ANIM_ACTION_B) == 0)
+            if (fmod(counterActionB, TIME_ANIM_ACTION_B) == 0)
             {
                 uint8_t direction = 0;
                 if (currentTileTarget.wY > Player.pos.worldY)
@@ -2174,7 +2181,7 @@ void updateCamera()
     cameraX = (Player.pos.pX - HALF_SCREEN_WIDTH) + cameraAheadX;
 
     //LERP
-    cameraX = lerp15by8(currentCameraX, cameraX, (CAMERA_FOLLOW_X_SPEED * FRAME_DURATION_8B));
+    cameraX = lerp15by8(currentCameraX, cameraX, int(CAMERA_FOLLOW_X_SPEED * fElapsedTime));
 
     //SHAKE
     if (cameraShakeAmount > 0)
@@ -2185,7 +2192,7 @@ void updateCamera()
 
     cameraY = Player.pos.pY - HALF_SCREEN_HEIGHT;
     //LERP
-    //cameraY = lerp15by8(currentCameraY, cameraY, CAMERA_FOLLOW_Y_SPEED*FRAME_DURATION_8B);
+    //cameraY = lerp15by8(currentCameraY, cameraY, CAMERA_FOLLOW_Y_SPEED*fElapsedTime);
 
     //SHAKE
     if (cameraShakeAmount > 0)
@@ -2270,22 +2277,6 @@ bool playerPickupItem(Titem *currentItem)
 
 void checkPlayerState()
 {
-    // Check for pickups!
-    /*
-		if (GetTile(fNewPlayerPosX + 0.0f, fNewPlayerPosY + 0.0f) == L'o')
-	
-		if (GetTile(fNewPlayerPosX + 0.0f, fNewPlayerPosY + 1.0f) == L'o')
-	
-		if (GetTile(fNewPlayerPosX + 1.0f, fNewPlayerPosY + 0.0f) == L'o')
-	
-		if (GetTile(fNewPlayerPosX + 1.0f, fNewPlayerPosY + 1.0f) == L'o')
-	        
-        uint8_t tileTL = getWorldAtPix(Player.pos.newX, Player.pos.pY);
-        uint8_t tileBL = getWorldAtPix(Player.pos.newX, Player.pos.pY + 15);
-
-
-*/
-    //Deux briques SUR player ?
     brique_PLAYER_TL = getWorldAtPix(Player.pos.pX, Player.pos.pY);
     brique_PLAYER_BL = getWorldAtPix(Player.pos.pX, Player.pos.pY + 15);
     brique_PLAYER_TR = getWorldAtPix(Player.pos.pX + 15, Player.pos.pY);
@@ -2333,8 +2324,8 @@ void checkPlayerCollisionsEntities()
             //           ((currentItem->worldY >= (worldMIN_Y - 1)) && (currentItem->worldY <= (worldMAX_Y + 1))))
             {
 
-                int px = currentItem->x;
-                int py = currentItem->y;
+                int px = currentItem->pX;
+                int py = currentItem->pY;
 
                 //BBox
                 if (px < Player.pos.pX + 16 &&
@@ -2372,8 +2363,8 @@ void checkPlayerCollisionsEntities()
             //      ((currentEnnemy->worldY >= (worldMIN_Y - 1)) && (currentEnnemy->worldY <= (worldMAX_Y + 1))))
             {
 
-                int px = currentEnnemy->x;
-                int py = currentEnnemy->y;
+                int px = currentEnnemy->pX;
+                int py = currentEnnemy->pY;
 
                 //BBox
                 if (px < Player.pos.pX + 14 &&
@@ -2475,7 +2466,6 @@ void updatePlayer()
 
 void computePlayerAnimations()
 {
-    //Serial.printf("counterActionB:%d Player.bJumping:%d Player.bFalling:%d bOnGround:%d Player.bWantWalk:%d Player.bWalking:%d\n", counterActionB, Player.bJumping, Player.bFalling, bOnGround, Player.bWantWalk, Player.bWalking);
     if (counterActionB > 0)
     {
         //@todo : Test type action,
@@ -2543,44 +2533,44 @@ void updateEnnemies()
             {
                 //Update velocities
                 //Gravity
-                currentEnnemy->speed_y = currentEnnemy->speed_y + FALLING_SPEED;
+                currentEnnemy->speedY = currentEnnemy->speedY + (FALLING_SPEED * fElapsedTime);
 
                 //Frotements
                 /* if (currentEnnemy->bOnGround)
                 {
-                    if (currentEnnemy->speed_x > 0)
-                        currentEnnemy->speed_x--;
-                    else if (currentEnnemy->speed_x < 0)
-                        currentEnnemy->speed_x++;
+                    if (currentEnnemy->speedX > 0)
+                        currentEnnemy->speedX--;
+                    else if (currentEnnemy->speedX < 0)
+                        currentEnnemy->speedX++;
                 }*/
 
-                if (currentEnnemy->speed_x > MAX_SPEED_X)
-                    currentEnnemy->speed_x = MAX_SPEED_X;
-                else if (currentEnnemy->speed_x < -MAX_SPEED_X)
-                    currentEnnemy->speed_x = -MAX_SPEED_X;
+                if (currentEnnemy->speedX > MAX_SPEED_X)
+                    currentEnnemy->speedX = MAX_SPEED_X;
+                else if (currentEnnemy->speedX < -MAX_SPEED_X)
+                    currentEnnemy->speedX = -MAX_SPEED_X;
 
-                if (currentEnnemy->speed_y > MAX_SPEED_Y)
-                    currentEnnemy->speed_y = MAX_SPEED_Y;
-                else if (currentEnnemy->speed_y < -MAX_SPEED_Y)
-                    currentEnnemy->speed_y = -MAX_SPEED_Y;
+                if (currentEnnemy->speedY > MAX_SPEED_Y)
+                    currentEnnemy->speedY = MAX_SPEED_Y;
+                else if (currentEnnemy->speedY < -MAX_SPEED_Y)
+                    currentEnnemy->speedY = -MAX_SPEED_Y;
 
                 //update pos
-                if (currentEnnemy->speed_x > 0)
+                if (currentEnnemy->speedX > 0)
                 {
-                    currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
+                    currentEnnemy->newX = currentEnnemy->pX + (currentEnnemy->speedX * fElapsedTime);
                     currentEnnemy->bWalking = true;
 
-                    currentEnnemy->new_x = min(((WORLD_WIDTH - 1) * 16), currentEnnemy->new_x);
+                    currentEnnemy->newX = min(((WORLD_WIDTH - 1) * 16), currentEnnemy->newX);
                 }
-                else if (currentEnnemy->speed_x < 0)
+                else if (currentEnnemy->speedX < 0)
                 {
-                    currentEnnemy->new_x = currentEnnemy->x + currentEnnemy->speed_x;
+                    currentEnnemy->newX = currentEnnemy->pX + (currentEnnemy->speedX * fElapsedTime);
                     currentEnnemy->bWalking = true;
 
-                    currentEnnemy->new_x = max(0, currentEnnemy->new_x);
+                    currentEnnemy->newX = max(0, currentEnnemy->newX);
                 }
 
-                currentEnnemy->new_y = currentEnnemy->y + currentEnnemy->speed_y;
+                currentEnnemy->newY = currentEnnemy->pY + (currentEnnemy->speedY * fElapsedTime);
 
                 //collisions
                 checkEnnemyCollisionsWorld(currentEnnemy);
@@ -2592,39 +2582,39 @@ void updateEnnemies()
 void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
 {
     //X
-    if (currentEnnemy->speed_x <= 0)
+    if (currentEnnemy->speedX <= 0)
     {
-        TworldTile tileTL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y);
-        TworldTile tileBL = getWorldAtPix(currentEnnemy->new_x, currentEnnemy->y + 15);
+        TworldTile tileTL = getWorldAtPix(currentEnnemy->newX, currentEnnemy->pY);
+        TworldTile tileBL = getWorldAtPix(currentEnnemy->newX, currentEnnemy->pY + 15);
         if ((!tileTL.traversable) || (!tileBL.traversable))
         {
-            currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16)) + 16;
-            currentEnnemy->speed_x = -currentEnnemy->speed_x;
+            currentEnnemy->newX = (currentEnnemy->newX - fmod(currentEnnemy->newX, 16)) + 16;
+            currentEnnemy->speedX = -currentEnnemy->speedX;
         }
     }
     else
     {
-        TworldTile tileTR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y);
-        TworldTile tileBR = getWorldAtPix(currentEnnemy->new_x + 16, currentEnnemy->y + 15);
+        TworldTile tileTR = getWorldAtPix(currentEnnemy->newX + 16, currentEnnemy->pY);
+        TworldTile tileBR = getWorldAtPix(currentEnnemy->newX + 16, currentEnnemy->pY + 15);
         if ((!tileTR.traversable) || (!tileBR.traversable))
         {
-            currentEnnemy->new_x = (currentEnnemy->new_x - (currentEnnemy->new_x % 16));
-            currentEnnemy->speed_x = -currentEnnemy->speed_x;
+            currentEnnemy->newX = (currentEnnemy->newX - fmod(currentEnnemy->newX, 16));
+            currentEnnemy->speedX = -currentEnnemy->speedX;
         }
     }
     //Y
     currentEnnemy->bOnGround = false;
     currentEnnemy->bJumping = false;
     currentEnnemy->bFalling = false;
-    if (currentEnnemy->speed_y <= 0)
+    if (currentEnnemy->speedY <= 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        TworldTile tileTL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y);
-        TworldTile tileTR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y);
+        TworldTile tileTL = getWorldAtPix(currentEnnemy->newX + 0, currentEnnemy->newY);
+        TworldTile tileTR = getWorldAtPix(currentEnnemy->newX + 15, currentEnnemy->newY);
         if ((!tileTL.traversable) || (!tileTR.traversable))
         {
-            currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16)) + 16;
-            currentEnnemy->speed_y = 0;
+            currentEnnemy->newY = (currentEnnemy->newY - fmod(currentEnnemy->newY,16)) + 16;
+            currentEnnemy->speedY = 0;
         }
         else
         {
@@ -2635,22 +2625,22 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
     {
         currentEnnemy->bFalling = true;
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        TworldTile tileBL = getWorldAtPix(currentEnnemy->new_x + 0, currentEnnemy->new_y + 16);
-        TworldTile tileBR = getWorldAtPix(currentEnnemy->new_x + 15, currentEnnemy->new_y + 16);
+        TworldTile tileBL = getWorldAtPix(currentEnnemy->newX + 0, currentEnnemy->newY + 16);
+        TworldTile tileBR = getWorldAtPix(currentEnnemy->newX + 15, currentEnnemy->newY + 16);
         if ((!tileBL.traversable) || (!tileBR.traversable))
         {
-            currentEnnemy->new_y = (currentEnnemy->new_y - (currentEnnemy->new_y % 16));
+            currentEnnemy->newY = (currentEnnemy->newY - fmod(currentEnnemy->newY, 16));
             currentEnnemy->bOnGround = true;
             currentEnnemy->bFalling = false;
-            currentEnnemy->speed_y = 0;
+            currentEnnemy->speedY = 0;
         }
     }
 
-    currentEnnemy->x = currentEnnemy->new_x;
-    currentEnnemy->y = currentEnnemy->new_y;
+    currentEnnemy->pX = currentEnnemy->newX;
+    currentEnnemy->pY = currentEnnemy->newY;
 
-    currentEnnemy->worldX = currentEnnemy->x / 16;
-    currentEnnemy->worldY = currentEnnemy->y / 16;
+    currentEnnemy->worldX = currentEnnemy->pX / 16;
+    currentEnnemy->worldY = currentEnnemy->pY / 16;
 }
 
 void updateEnnemyIA(Tennemy *currentEnnemy)
@@ -2667,80 +2657,80 @@ void updateEnnemyIA(Tennemy *currentEnnemy)
             //Deplacement
             if (currentEnnemy->type == SPIDER_ENNEMY)
             {
-                if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
-                    currentEnnemy->speed_x = SPIDER_WALKING_SPEED;
-                else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
-                    currentEnnemy->speed_x = -SPIDER_WALKING_SPEED;
+                if ((currentEnnemy->speedX < 0) && currentEnnemy->pX <= 0)
+                    currentEnnemy->speedX = SPIDER_WALKING_SPEED;
+                else if ((currentEnnemy->speedX > 0) && currentEnnemy->pX >= WORLD_WIDTH * 16)
+                    currentEnnemy->speedX = -SPIDER_WALKING_SPEED;
 
                 if (distY <= 2)
                 {
                     int dist = currentEnnemy->worldX - Player.pos.worldX;
                     if (dist < 0 && dist > -5)
                     {
-                        currentEnnemy->speed_x = SPIDER_WALKING_SPEED;
+                        currentEnnemy->speedX = SPIDER_WALKING_SPEED;
                     }
                     else if (dist > 0 && dist < 5)
                     {
-                        currentEnnemy->speed_x = -SPIDER_WALKING_SPEED;
+                        currentEnnemy->speedX = -SPIDER_WALKING_SPEED;
                     }
                 }
             }
             else if (currentEnnemy->type == ZOMBI_ENNEMY)
             {
-                if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
-                    currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
-                else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
-                    currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
+                if ((currentEnnemy->speedX < 0) && currentEnnemy->pX <= 0)
+                    currentEnnemy->speedX = ZOMBI_WALKING_SPEED;
+                else if ((currentEnnemy->speedX > 0) && currentEnnemy->pX >= WORLD_WIDTH * 16)
+                    currentEnnemy->speedX = -ZOMBI_WALKING_SPEED;
 
                 if (currentEnnemy->worldY == Player.pos.worldY)
                 {
                     int dist = currentEnnemy->worldX - Player.pos.worldX;
                     if (dist < 0 && dist > -5)
                     {
-                        currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
+                        currentEnnemy->speedX = ZOMBI_WALKING_SPEED;
                     }
                     else if (dist > 0 && dist < 5)
                     {
-                        currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
+                        currentEnnemy->speedX = -ZOMBI_WALKING_SPEED;
                     }
                 }
             }
             else if (currentEnnemy->type == SKEL_ENNEMY)
             {
-                if ((currentEnnemy->speed_x < 0) && currentEnnemy->x <= 0)
-                    currentEnnemy->speed_x = SKEL_WALKING_SPEED;
-                else if ((currentEnnemy->speed_x > 0) && currentEnnemy->x >= WORLD_WIDTH * 16)
-                    currentEnnemy->speed_x = -SKEL_WALKING_SPEED;
+                if ((currentEnnemy->speedX < 0) && currentEnnemy->pX <= 0)
+                    currentEnnemy->speedX = SKEL_WALKING_SPEED;
+                else if ((currentEnnemy->speedX > 0) && currentEnnemy->pX >= WORLD_WIDTH * 16)
+                    currentEnnemy->speedX = -SKEL_WALKING_SPEED;
 
                 if (currentEnnemy->worldY == Player.pos.worldY)
                 {
                     int dist = currentEnnemy->worldX - Player.pos.worldX;
                     if (dist < 0 && dist > -5)
                     {
-                        currentEnnemy->speed_x = ZOMBI_WALKING_SPEED;
+                        currentEnnemy->speedX = ZOMBI_WALKING_SPEED;
                     }
                     else if (dist > 0 && dist < 5)
                     {
-                        currentEnnemy->speed_x = -ZOMBI_WALKING_SPEED;
+                        currentEnnemy->speedX = -ZOMBI_WALKING_SPEED;
                     }
                 }
                 else
                 {
                     //On essaie de pas tomber
-                    if (currentEnnemy->speed_x <= 0)
+                    if (currentEnnemy->speedX <= 0)
                     {
-                        TworldTile tileBL = getWorldAtPix((currentEnnemy->x + currentEnnemy->speed_x), currentEnnemy->y + 16);
+                        TworldTile tileBL = getWorldAtPix((currentEnnemy->pX + currentEnnemy->speedX), currentEnnemy->pY + 16);
                         if (tileBL.traversable)
                         {
-                            currentEnnemy->speed_x = -currentEnnemy->speed_x;
+                            currentEnnemy->speedX = -currentEnnemy->speedX;
                         }
                     }
                     else
                     {
-                        TworldTile tileBR = getWorldAtPix((currentEnnemy->x + currentEnnemy->speed_x) + 15, currentEnnemy->y + 16);
+                        TworldTile tileBR = getWorldAtPix((currentEnnemy->pX + currentEnnemy->speedX) + 15, currentEnnemy->pY + 16);
                         if (tileBR.traversable)
                         {
-                            currentEnnemy->speed_x = -currentEnnemy->speed_x;
+                            currentEnnemy->speedX = -currentEnnemy->speedX;
                         }
                     }
                 }
@@ -2771,15 +2761,15 @@ void updateItems()
             {
                 //Update velocities
                 //Gravity
-                currentItem->speed_y = currentItem->speed_y + FALLING_SPEED;
+                currentItem->speedY = currentItem->speedY + FALLING_SPEED * fElapsedTime;
 
-                if (currentItem->speed_y > MAX_SPEED_Y)
-                    currentItem->speed_y = MAX_SPEED_Y;
-                else if (currentItem->speed_y < -MAX_SPEED_Y)
-                    currentItem->speed_y = -MAX_SPEED_Y;
+                if (currentItem->speedY > MAX_SPEED_Y)
+                    currentItem->speedY = MAX_SPEED_Y;
+                else if (currentItem->speedY < -MAX_SPEED_Y)
+                    currentItem->speedY = -MAX_SPEED_Y;
 
                 //update pos
-                currentItem->new_y = currentItem->y + currentItem->speed_y;
+                currentItem->newY = currentItem->pY + currentItem->speedY * fElapsedTime;
 
                 //collisions
                 checkItemCollisionsWorld(currentItem);
@@ -2797,15 +2787,15 @@ void checkItemCollisionsWorld(Titem *currentItem)
     currentItem->bOnGround = false;
     currentItem->bJumping = false;
     currentItem->bFalling = false;
-    if (currentItem->speed_y <= 0)
+    if (currentItem->speedY <= 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        TworldTile tileTL = getWorldAtPix(currentItem->x + 0, currentItem->new_y);
-        TworldTile tileTR = getWorldAtPix(currentItem->x + 15, currentItem->new_y);
+        TworldTile tileTL = getWorldAtPix(currentItem->pX + 0, currentItem->newY);
+        TworldTile tileTR = getWorldAtPix(currentItem->pX + 15, currentItem->newY);
         if ((!tileTL.traversable) || (!tileTR.traversable))
         {
-            currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16)) + 16;
-            currentItem->speed_y = 0;
+            currentItem->newY = (currentItem->newY - fmod(currentItem->newY, 16)) + 16;
+            currentItem->speedY = 0;
         }
         else
         {
@@ -2816,21 +2806,21 @@ void checkItemCollisionsWorld(Titem *currentItem)
     {
         currentItem->bFalling = true;
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
-        TworldTile tileBL = getWorldAtPix(currentItem->x + 0, currentItem->new_y + 16);
-        TworldTile tileBR = getWorldAtPix(currentItem->x + 15, currentItem->new_y + 16);
+        TworldTile tileBL = getWorldAtPix(currentItem->pX + 0, currentItem->newY + 16);
+        TworldTile tileBR = getWorldAtPix(currentItem->pX + 15, currentItem->newY + 16);
         if ((!tileBL.traversable) || (!tileBR.traversable))
         {
-            currentItem->new_y = (currentItem->new_y - (currentItem->new_y % 16));
+            currentItem->newY = (currentItem->newY - fmod(currentItem->newY, 16));
             currentItem->bOnGround = true;
             currentItem->bFalling = false;
-            currentItem->speed_y = 0;
+            currentItem->speedY = 0;
         }
     }
 
-    currentItem->y = currentItem->new_y;
+    currentItem->pY = currentItem->newY;
 
-    currentItem->worldX = currentItem->x / 16;
-    currentItem->worldY = currentItem->y / 16;
+    currentItem->worldX = currentItem->pX / 16;
+    currentItem->worldY = currentItem->pY / 16;
 }
 
 void updateWorld()
@@ -2909,14 +2899,13 @@ void updatePlayerVelocities()
         //Gravity
         if (everyXFrames(5)) //Probleme, faut passer en float...en attendant on saute des frame...
         {
-            Player.pos.speedY = Player.pos.speedY + FALLING_SPEED;
+            Player.pos.speedY = Player.pos.speedY + FALLING_SPEED * fElapsedTime;
 
-            //Frotements, a revoir
-            if (Player.pos.speedX > 0)
-                Player.pos.speedX --;
-            else if (Player.pos.speedX < 0)
-                Player.pos.speedX ++;
-        }       //Attention du coup le onground ne marchge plus
+        
+			Player.pos.speedX += -2.0f * Player.pos.speedX * fElapsedTime;
+			if (fabs(Player.pos.speedX) < 0.01f)
+				Player.pos.speedX = 0.0f; 
+        }      //Attention du coup le onground ne marchge plus
 
         if (Player.pos.speedX > (MAX_SPEED_X >> 1))
             Player.pos.speedX = (MAX_SPEED_X >> 1);
@@ -2931,15 +2920,15 @@ void updatePlayerVelocities()
     else
     {
         //Gravity
-        Player.pos.speedY = Player.pos.speedY + FALLING_SPEED;
+         Player.pos.speedY = Player.pos.speedY + (FALLING_SPEED * fElapsedTime);
+        //else...
 
         //Frotements, a revoir
         if (Player.bOnGround)
         {
-            if (Player.pos.speedX > 0)
-                Player.pos.speedX--;
-            else if (Player.pos.speedX < 0)
-                Player.pos.speedX++;
+			Player.pos.speedX += -10.0f * Player.pos.speedX * fElapsedTime;
+			if (fabs(Player.pos.speedX) < 0.01f)
+				Player.pos.speedX = 0.0f; 
         }
 
         if (Player.pos.speedX > MAX_SPEED_X)
@@ -2961,24 +2950,26 @@ inline void updatePlayerPosition()
         //CHECK COLLISION a refaire propre
         if (Player.pos.speedX > 0)
         {
-            Player.pos.newX = Player.pos.pX + Player.pos.speedX;
+            Player.pos.newX = Player.pos.pX + (Player.pos.speedX * fElapsedTime);
             Player.pos.newX = min(((WORLD_WIDTH - 2) * 16), Player.pos.newX);
         }
         else if (Player.pos.speedX < 0)
         {
-            Player.pos.newX = Player.pos.pX + Player.pos.speedX;
+            Player.pos.newX = Player.pos.pX + (Player.pos.speedX * fElapsedTime);
             Player.pos.newX = max(0, Player.pos.newX);
         }
     }
 
-    Player.pos.newY = Player.pos.pY + Player.pos.speedY;
+    Player.pos.newY = Player.pos.pY + (Player.pos.speedY * fElapsedTime);
 }
 
 void checkPlayerCollisionsWorld()
 {
     bool bWasOnGround = Player.bOnGround;
+
+    Player.bOnLeftWall = Player.bOnRightWall = false;
     //X
-    if (Player.pos.speedX < 0)
+    if (Player.pos.speedX <= 0)
     {
         // +0 +0
         // +0 +15
@@ -2986,8 +2977,9 @@ void checkPlayerCollisionsWorld()
         TworldTile tileBL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + 15);
         if (!tileTL.traversable || !tileBL.traversable)
         {
-            Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + (16 - PLAYER_X_BDM);
+            Player.pos.newX = (Player.pos.newX - fmod(Player.pos.newX, 16)) + (16 - PLAYER_X_BDM);
             Player.pos.speedX = 0;
+            Player.bOnLeftWall = true;
         }
     }
     else if (Player.pos.speedX > 0)
@@ -2998,8 +2990,9 @@ void checkPlayerCollisionsWorld()
         TworldTile tileBR = getWorldAtPix(Player.pos.newX + (16 - PLAYER_X_BDM), Player.pos.pY + 15);
         if (!tileTR.traversable || !tileBR.traversable)
         {
-            Player.pos.newX = (Player.pos.newX - (Player.pos.newX % 16)) + PLAYER_X_BDM;
+            Player.pos.newX = (Player.pos.newX - fmod(Player.pos.newX, 16)) + PLAYER_X_BDM;
             Player.pos.speedX = 0;
+            Player.bOnRightWall = true;
         }
     }
     //Y
@@ -3008,7 +3001,7 @@ void checkPlayerCollisionsWorld()
     Player.bOnGround = false;
     Player.bLanding = false;
 
-    if (Player.pos.speedY <= 0)
+    if (Player.pos.speedY < 0)
     {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         // +0 +0
@@ -3017,7 +3010,7 @@ void checkPlayerCollisionsWorld()
         TworldTile tileTR = getWorldAtPix(Player.pos.newX + (15 - PLAYER_X_BDM), Player.pos.newY + PLAYER_Y_BDM);
         if (!tileTL.traversable || !tileTR.traversable)
         {
-            Player.pos.newY = (Player.pos.newY - (Player.pos.newY % 16)) + (16 - PLAYER_Y_BDM); // - PLAYER_Y_BDM ??
+            Player.pos.newY = (Player.pos.newY - fmod(Player.pos.newY, 16)) + (16 - PLAYER_Y_BDM); // - PLAYER_Y_BDM ??
             Player.pos.speedY = 0;
         }
         else
@@ -3025,9 +3018,8 @@ void checkPlayerCollisionsWorld()
             Player.bJumping = true;
         }
     }
-    else
-    {
-        Player.bFalling = true;
+    else // if (Player.pos.speedY >= 0)
+    {        
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         // +0 +16
         // +15 +16
@@ -3036,10 +3028,10 @@ void checkPlayerCollisionsWorld()
         TworldTile tileBR = getWorldAtPix(Player.pos.newX + (15 - PLAYER_X_BDM), Player.pos.newY + 16);
         if (!tileBL.traversable || !tileBR.traversable)
         {
-            Player.pos.newY = Player.pos.newY - (Player.pos.newY % 16);
+            Player.pos.newY = Player.pos.newY - fmod(Player.pos.newY, 16);
             Player.bOnGround = true;
             Player.bFalling = false;
-            //Si la vitesse etait importante on vient d'atterir, spawn effect
+           //Si la vitesse etait importante on vient d'atterir, spawn effect
             if (!bWasOnGround && Player.pos.speedY >= SPEED_Y_LANDING)
                 Player.bLanding = true;
 
@@ -3047,20 +3039,40 @@ void checkPlayerCollisionsWorld()
             Player.bDoubleJumping = false;
             Player.pos.speedY = 0;
         }
+        else
+        {
+            Player.bFalling = true;
+        }
     }
+
+    //Ground
     if (Player.onGroundCounter > 0)
-        Player.onGroundCounter--;
-
+        Player.onGroundCounter -= fElapsedTime;
     if (Player.bOnGround)
-        Player.onGroundCounter = FRAMES_GROUND_LATENCY;
+        Player.onGroundCounter = TIME_GROUND_LATENCY;
 
+//    Serial.printf("Player: onGround:%d Falling:%d speedY:%f\n", Player.bOnGround, Player.bFalling, Player.pos.speedY);
+
+    if (Player.onWallCounter  > 0)
+        Player.onWallCounter -= fElapsedTime;
+    if (Player.bOnLeftWall || Player.bOnRightWall)
+        Player.onWallCounter = TIME_WALL_LATENCY;
+
+    //Walking
     Player.bWalking = false;
     if (Player.pos.pX != Player.pos.newX)
     {
         Player.bWalking = true;
         Player.pos.pX = Player.pos.newX;
     }
-    Player.pos.pY = Player.pos.newY;
+
+    Player.bMovingUpDown = false;
+    if (Player.pos.pY != Player.pos.newY )
+    {
+        Player.bMovingUpDown = true;
+        Player.pos.pY = Player.pos.newY;
+    }
+
 }
 
 void checkPlayerInputs()
@@ -3070,10 +3082,10 @@ void checkPlayerInputs()
     Player.bWantWalk = false;
 
     if (A_just_pressedCounter > 0)
-        A_just_pressedCounter--;
+        A_just_pressedCounter -= fElapsedTime;
 
     if (Player.jumpCounter > 0)
-        Player.jumpCounter--;
+        Player.jumpCounter -= fElapsedTime;
 
     if (just_pressed & ARCADA_BUTTONMASK_SELECT)
     {
@@ -3095,13 +3107,13 @@ void checkPlayerInputs()
     //@todo : virer le test onGround pour attaques aeriennes..
     if (coolDownActionB <= 0 && (pressed_buttons & ARCADA_BUTTONMASK_B) && Player.bOnGround)
     {
-        counterActionB++;
+        counterActionB += fElapsedTime;
 
         int lastCibleX = currentTileTarget.wX;
         int lastCibleY = currentTileTarget.wY;
 
         //Ciblage, on laisse un peu de temps pour locker la cible
-        if (counterActionB < FRAMES_LOCK_ACTION_B)
+        if (counterActionB < TIME_LOCK_ACTION_B)
         {
             if (pressed_buttons & ARCADA_BUTTONMASK_UP)
             {
@@ -3148,12 +3160,12 @@ void checkPlayerInputs()
         }
         else
         {
-            if (counterActionB >= FRAMES_ACTION_B) //Action (pour le moment minage seulement)
+            if (counterActionB >= TIME_ACTION_B) //Action (pour le moment minage seulement)
             {
                 TworldTile *tile = currentTileTarget.tile;
                 currentTileTarget.tile->hit = 0;
                 counterActionB = 0;
-                coolDownActionB = FRAMES_COOLDOWN_B;
+                coolDownActionB = TIME_COOLDOWN_B;
                 lastCibleX = lastCibleY = 0;
                 bool bHit = false;
 
@@ -3239,7 +3251,7 @@ void checkPlayerInputs()
     else
     {
         if (coolDownActionB > 0)
-            coolDownActionB--;
+            coolDownActionB -= fElapsedTime;
 
         counterActionB = 0;
         if (currentTileTarget.tile != NULL)
@@ -3249,13 +3261,14 @@ void checkPlayerInputs()
 
         if (just_pressed & ARCADA_BUTTONMASK_A)
         {
-            A_just_pressedCounter = FRAMES_JUMP_LATENCY;
+            A_just_pressedCounter = TIME_JUMP_LATENCY;
 
             if (Player.onGroundCounter > 0) // && Player.pos.speedY == 0)
             {
+                Player.onGroundCounter = 0;
                 A_just_pressedCounter = 0;
                 Player.bWantJump = true;
-                Player.jumpCounter = FRAMES_DOUBLE_JUMP_DETECTION;
+                Player.jumpCounter = TIME_DOUBLE_JUMP_DETECTION;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
                 Player.pos.speedY = -JUMP_SPEED;
@@ -3275,27 +3288,73 @@ void checkPlayerInputs()
                 //Spawn Effect
                 set_double_jump_fx(true);
             }
+            else if (Player.onWallCounter)//(Player.onWallCounter > 0) // && Player.pos.speedY == 0)
+            {
+                Player.onWallCounter = 0;
+                A_just_pressedCounter = 0;
+                Player.bWantJump = true;
+                Player.jumpCounter = 0;
+                sndPlayerCanal1.play(AudioSample__Jump);
+                //Thrust
+                Player.pos.speedY = -JUMP_SPEED;
+                if (Player.bOnLeftWall)
+                {
+                    Player.pos.speedX = JUMP_SPEED;
+                    Player.pos.direction = 1;
+                }
+                else
+                {
+                    Player.pos.speedX = -JUMP_SPEED;
+                    Player.pos.direction = -1;
+                }
+                //Spawn Effect (wall juump)
+                set_double_jump_fx();
+            }     
         }
         else
         {
             //On a clique il y a peu de temps et on touche le sol...on saute
             if (A_just_pressedCounter && Player.onGroundCounter > 0)
             {
+                Serial.println("Jump2");
+                Player.onGroundCounter = 0;
                 A_just_pressedCounter = 0;
                 Player.bWantJump = true;
-                Player.jumpCounter = FRAMES_DOUBLE_JUMP_DETECTION;
+                Player.jumpCounter = TIME_DOUBLE_JUMP_DETECTION;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
                 Player.pos.speedY = -JUMP_SPEED;
                 //Spawn Effect
                 set_double_jump_fx();
             }
+            else if (A_just_pressedCounter && Player.onWallCounter > 0)
+            {
+                Player.onWallCounter = 0;
+                A_just_pressedCounter = 0;
+                Player.bWantJump = true;
+                Player.jumpCounter = 0;
+                sndPlayerCanal1.play(AudioSample__Jump);
+                //Thrust
+                Player.pos.speedY = -JUMP_SPEED;
+                if (Player.bOnLeftWall)
+                {
+                    Player.pos.speedX = JUMP_SPEED;
+                    Player.pos.direction = 1;
+                }
+                else
+                {
+                    Player.pos.speedX = -JUMP_SPEED;
+                    Player.pos.direction = -1;
+                }
+                //Spawn Effect (wall jump)
+                set_double_jump_fx();
+            }            
             else
             {
                 //Si on relache le bouton on saute moins haut..a tester
                 if ((just_released & ARCADA_BUTTONMASK_A) && Player.pos.speedY < 0)
                 {
-                    Player.pos.speedY = Player.pos.speedY >> 1;
+                    Player.pos.speedY = Player.pos.speedY / 2;
                 }
             }
         }
@@ -3305,13 +3364,11 @@ void checkPlayerInputs()
             Player.pos.direction = -1;
             Player.bWantWalk = true;
             if (Player.bOnGround)
-                Player.pos.speedX += -RUNNING_SPEED;
+                Player.pos.speedX += -(RUNNING_SPEED * fElapsedTime);
             else
             {
                 if (Player.pos.speedY < 0)
-                    Player.pos.speedX += -WALKING_SPEED;
-                else if (Player.pos.speedX == 0)
-                    Player.pos.speedX = -WALKING_SPEED;
+                    Player.pos.speedX += -(WALKING_SPEED * fElapsedTime);
             }
         }
         else if (pressed_buttons & ARCADA_BUTTONMASK_RIGHT)
@@ -3319,13 +3376,25 @@ void checkPlayerInputs()
             Player.pos.direction = 1;
             Player.bWantWalk = true;
             if (Player.bOnGround)
-                Player.pos.speedX += RUNNING_SPEED;
+                Player.pos.speedX += (RUNNING_SPEED * fElapsedTime);
             else
             {
                 if (Player.pos.speedY < 0)
-                    Player.pos.speedX += WALKING_SPEED;
-                else if (Player.pos.speedX == 0)
-                    Player.pos.speedX = WALKING_SPEED;
+                    Player.pos.speedX += (WALKING_SPEED * fElapsedTime);
+
+            }
+        }
+
+        if (pressed_buttons & ARCADA_BUTTONMASK_UP)
+        {
+            if (Player.bOnLeftWall || Player.bOnRightWall)
+            {
+            }
+        }
+        else if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
+        {
+            if (Player.bOnLeftWall || Player.bOnRightWall)
+            {
             }
         }
     }
@@ -3714,13 +3783,17 @@ void readInputs()
 void loop()
 {
     static uint8_t _old_lastFrameDurationMs = lastFrameDurationMs;
-    long elapsedTime;
 
     //long now = millis();
     //updateSoundManager(now);
 
     if (!nextFrame())
         return;
+
+    if (lastTime != 0)
+        fElapsedTime = (__now - lastTime) / 1000.0f;
+    lastTime = __now;
+    //Serial.printf("Elapsed:%f\n", fElapsedTime);
 
     readInputs();
     if (gameState == STATE_MAIN_MENU)
@@ -3746,7 +3819,7 @@ void loop()
 
     //elapsedTime = millis() - now;
 
-    if (lastFrameDurationMs > 30 && (_old_lastFrameDurationMs != lastFrameDurationMs))
+    if (lastFrameDurationMs > 37 && (_old_lastFrameDurationMs != lastFrameDurationMs))
     {
         Serial.printf("LFD:%d\n", lastFrameDurationMs);
         _old_lastFrameDurationMs = lastFrameDurationMs;
