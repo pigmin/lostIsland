@@ -29,11 +29,11 @@
 #include "res/fx_jump4.c"
 #include "res/fx_jump5.c"
 
-#include "res2/fx_splash1.c"
-#include "res2/fx_splash2.c"
-#include "res2/fx_splash3.c"
-#include "res2/fx_splash4.c"
-#include "res2/fx_splash5.c"
+#include "res/fx_splash1.c"
+#include "res/fx_splash2.c"
+#include "res/fx_splash3.c"
+#include "res/fx_splash4.c"
+#include "res/fx_splash5.c"
 
 #include "res/spider_walk1.c"
 #include "res/spider_walk2.c"

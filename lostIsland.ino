@@ -2380,7 +2380,7 @@ void checkPlayerCollisionsEntities()
                         killEnnemy(currentEnnemy, px, py);
                         cameraShakeAmount = CAMERA_KILL_ENNEMY_AMOUNT;
                         //rebond ?
-                        Player.pos.speedY = JUMP_SPEED / 3;
+                        Player.pos.speedY = JUMP_FORCE / 3;
                     }
                     else
                     {
@@ -2926,7 +2926,7 @@ void updatePlayerVelocities()
         //Frotements, a revoir
         if (Player.bOnGround)
         {
-			Player.pos.speedX += -10.0f * Player.pos.speedX * fElapsedTime;
+			Player.pos.speedX += -10.0f * Player.pos.speedX * fElapsedTime; 
 			if (fabs(Player.pos.speedX) < 0.01f)
 				Player.pos.speedX = 0.0f; 
         }
@@ -3271,7 +3271,7 @@ void checkPlayerInputs()
                 Player.jumpCounter = TIME_DOUBLE_JUMP_DETECTION;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
-                Player.pos.speedY = -JUMP_SPEED;
+                Player.pos.speedY = -JUMP_FORCE;
                 //Spawn Effect
                 set_double_jump_fx();
             }
@@ -3283,7 +3283,7 @@ void checkPlayerInputs()
                 Player.bWantDoubleJump = true;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
-                Player.pos.speedY = -DOUBLE_JUMP_SPEED;
+                Player.pos.speedY = -DOUBLE_JUMP_FORCE;
                 Player.bDoubleJumping = true;
                 //Spawn Effect
                 set_double_jump_fx(true);
@@ -3296,15 +3296,15 @@ void checkPlayerInputs()
                 Player.jumpCounter = 0;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
-                Player.pos.speedY = -JUMP_SPEED;
+                Player.pos.speedY = -JUMP_FORCE;
                 if (Player.bOnLeftWall)
                 {
-                    Player.pos.speedX = JUMP_SPEED;
+                    Player.pos.speedX = JUMP_FORCE;
                     Player.pos.direction = 1;
                 }
                 else
                 {
-                    Player.pos.speedX = -JUMP_SPEED;
+                    Player.pos.speedX = -JUMP_FORCE;
                     Player.pos.direction = -1;
                 }
                 //Spawn Effect (wall juump)
@@ -3323,7 +3323,7 @@ void checkPlayerInputs()
                 Player.jumpCounter = TIME_DOUBLE_JUMP_DETECTION;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
-                Player.pos.speedY = -JUMP_SPEED;
+                Player.pos.speedY = -JUMP_FORCE;
                 //Spawn Effect
                 set_double_jump_fx();
             }
@@ -3335,15 +3335,15 @@ void checkPlayerInputs()
                 Player.jumpCounter = 0;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
-                Player.pos.speedY = -JUMP_SPEED;
+                Player.pos.speedY = -JUMP_FORCE;
                 if (Player.bOnLeftWall)
                 {
-                    Player.pos.speedX = JUMP_SPEED;
+                    Player.pos.speedX = JUMP_FORCE;
                     Player.pos.direction = 1;
                 }
                 else
                 {
-                    Player.pos.speedX = -JUMP_SPEED;
+                    Player.pos.speedX = -JUMP_FORCE;
                     Player.pos.direction = -1;
                 }
                 //Spawn Effect (wall jump)
