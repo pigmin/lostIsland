@@ -72,7 +72,7 @@ int worldMIN_Y = 0;
 int worldMAX_Y = 0;
 int currentOffset_Y = 0;
 
-float counterActionB = 0;
+float timerActionB = 0;
 float coolDownActionB = 0;
 
 uint16_t lastRowErosion = 0;
@@ -98,7 +98,7 @@ TworldTile WORLD[WORLD_HEIGHT + 2][WORLD_WIDTH];
 uint8_t pressed_buttons = 0;
 uint8_t just_pressed = 0;
 uint8_t just_released = 0;
-uint8_t A_just_pressedCounter = 0;
+uint8_t A_just_pressedTimer = 0;
 
 int SCORE = 0;
 bool bWin = false;
@@ -117,6 +117,7 @@ TworldTile brique_PLAYER_TL= {0};
 TworldTile brique_PLAYER_BL = {0};
 TworldTile brique_PLAYER_TR = {0};
 TworldTile brique_PLAYER_BR = {0};
+TworldTile brique_LEDGE = {0};
 
 struct {
     TworldTile  *tile;

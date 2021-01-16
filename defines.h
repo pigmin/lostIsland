@@ -42,7 +42,12 @@
 
 #define FALLING_SPEED 625
 #define WALKING_SPEED 1000
-#define RUNNING_SPEED 1250
+#define RUNNING_SPEED 1400
+#define FLOATING_SPEED 700
+
+#define WALL_SLIDE_SPEED 150
+#define CLIMBING_SPEED 250
+
 //Nombre de frames ou on considere le player comme encore sur le sol (pour les air jumps)
 #define TIME_GROUND_LATENCY   0.15f
 //On se rapelle de la demande de saut pendant x frames (pour sauter meme si on touchait pas encore le sol mais juste apres oui...)
@@ -50,19 +55,33 @@
 //On autorise le double jump apres x frames suivant le jump classique
 #define TIME_DOUBLE_JUMP_DETECTION    0.5f
 
-//Nombre de frames ou on considere le player comme encore sur le mur (pour les air jumps)
-#define TIME_WALL_LATENCY   0.15f
+//Timer pour dire quand on a realise le dernier walljump
+#define TIME_WALL_LATENCY   0.5f
 
+#define TURN_TIMER_SET   0.1f
 
 //Au dela de cette vitesse de chute on fera de la poussiere au sol
 #define SPEED_Y_LANDING   8
 
 #define MAX_SPEED_X 100
 #define MAX_SPEED_Y 375
+#define MAX_SPEED_Y_SLIDING 60
+#define MAX_SPEED_Y_CLIMBING 40
+
 
 //Independants de elapsedtime
-#define JUMP_SPEED 250
-#define DOUBLE_JUMP_SPEED 200
+#define JUMP_FORCE        250
+#define DOUBLE_JUMP_FORCE 200
+
+//Lacher de mur
+#define WALL_HOP_FORCE_X 50
+#define WALL_HOP_FORCE_Y 100
+//Wall jump
+#define WALL_JUMP_FORCE_X 200
+#define WALL_JUMP_FORCE_Y 250
+
+//Wall jump vertical (climb)
+#define WALL_JUMP_CLIMB_FORCE_Y 150
 
 #define DEFAULT_ITEM_SHAKE_AMOUNT   6
 #define CAMERA_KILL_ENNEMY_AMOUNT   5
@@ -73,6 +92,12 @@
 
 //Nombre max de pile par type d'item
 #define MAX_STACK_ITEMS 64
+
+#define DIRECTION_NONE    0
+#define DIRECTION_UP      -1
+#define DIRECTION_DOWN    1
+#define DIRECTION_LEFT    -1
+#define DIRECTION_RIGHT   1
 
 #endif
 

@@ -40,6 +40,12 @@ static const uint32_t PROGMEM pmf_aceman[] =
     }
 #endif
 
+
+    const float ledgeClimbXOffset1 = 0.0f;
+    const float ledgeClimbYOffset1 = 0.0f;
+    const float ledgeClimbXOffset2 = 0.0f;
+    const float ledgeClimbYOffset2 = 0.0f;
+
 void PlayMOD(const void *pmf_file)
 {
     s_player.load(pmf_file);
@@ -185,7 +191,7 @@ bool nextFrame()
     return post_render;
 }
 
-TworldTile getWorldAtPix(int16_t px, int16_t py)
+inline TworldTile getWorldAtPix(int16_t px, int16_t py)
 {
     TworldTile res = {0};
 
@@ -216,7 +222,7 @@ void updateHauteurColonne(int16_t x, int16_t y)
     WORLD[HEADER_ROW][x].id = newH;
 }
 
-TworldTile getWorldAt(int16_t x, int16_t y)
+inline TworldTile getWorldAt(int16_t x, int16_t y)
 {
     TworldTile res = {0};
 
@@ -226,7 +232,7 @@ TworldTile getWorldAt(int16_t x, int16_t y)
     return res;
 }
 
-void setWorldAt(int16_t x, int16_t y, TworldTile val)
+inline void setWorldAt(int16_t x, int16_t y, TworldTile val)
 {
     if ((x > 0 && x < WORLD_WIDTH) && (y > 0 && y < WORLD_HEIGHT))
         WORLD[y][x] = val;
@@ -335,14 +341,11 @@ void initPlayer()
 
     Player.pos.worldX = BASE_X_PLAYER;
     Player.pos.worldY = (WORLD[HEADER_ROW][BASE_X_PLAYER].id) - 1;
-    Player.pos.pX = Player.pos.worldX * 16;
-    Player.pos.pY = Player.pos.worldY * 16;
+    setPlayerPos(Player.pos.worldX * 16, Player.pos.worldY * 16);
     Player.pos.speedX = 0;
     Player.pos.speedY = 0;
-    Player.pos.newX = Player.pos.pX;
-    Player.pos.newY = Player.pos.pY;
 
-    Player.pos.direction = 1;
+    Player.pos.direction = DIRECTION_RIGHT;
     Player.pos.XFront = 0;
     Player.pos.YDown = 0;
     Player.pos.YUp = 0;
@@ -365,20 +368,31 @@ void initPlayer()
     Player.bWantDoubleJump = false;
     Player.bWantWalk = false;
 
+    Player.bCanMove = true;
+    Player.bCanFlip = true;
+    Player.bHasWallJumped = false;
+    Player.lastWallJumpDirection = 0;
+    Player.wantedHorizontalDirection = 0;
+    Player.wantedVerticalDirection = 0;
+
     Player.bDying = false;
     Player.bJumping = false;
-    Player.jumpCounter = 0;
+    Player.jumpTimer = 0;
+    Player.wallJumpTimer = 0;
     Player.bDoubleJumping = false;
+    Player.bWallSliding = false;
+    Player.bWallClimbing = false;
     Player.bFalling = false;
     Player.bWalking = false;
     Player.bTouched = false;
     Player.fTouchCountDown = 0;
     Player.bOnGround = false;
     Player.bLanding = false;
-    Player.onGroundCounter = 0;
-    Player.bOnLeftWall = false;
-    Player.bOnRightWall = false;
-    Player.onWallCounter = 0;
+    Player.onGroundTimer = 0;
+    Player.bTouchingWall = false;
+    Player.bTouchingLedge = false;
+    Player.bLedgeDetected = false;
+    Player.bClimbingLedge = false;
     Player.bUnderWater = false;
     Player.bSplashIn = false;
     Player.bSplashOut = false;
@@ -402,7 +416,7 @@ void initGame()
 
     currentX_back = 0;
 
-    counterActionB = 0;
+    timerActionB = 0;
     coolDownActionB = 0;
 
     jumpPhase = 0;
@@ -446,6 +460,28 @@ void set_jumping()
     }
 }
 
+void set_sliding()
+{
+    if (Player.stateAnim != PLAYER_STATE_WALL_SLIDING)
+    {
+        Player.stateAnim = PLAYER_STATE_WALL_SLIDING;
+
+        Player.anim_frame = PLAYER_FRAME_SLIDING_1;
+        Player.current_framerate = 0;
+    }
+}
+
+void set_wall_climbing()
+{
+    if (Player.stateAnim != PLAYER_STATE_WALL_CLIMBING)
+    {
+        Player.stateAnim = PLAYER_STATE_WALL_CLIMBING;
+
+        Player.anim_frame = PLAYER_FRAME_WALL_CLIMBING_1;
+        Player.current_framerate = 0;
+    }
+}
+
 void set_walking()
 {
     if (Player.stateAnim != PLAYER_STATE_WALK)
@@ -453,6 +489,18 @@ void set_walking()
         Player.stateAnim = PLAYER_STATE_WALK;
 
         Player.anim_frame = PLAYER_FRAME_WALK_1;
+        Player.current_framerate = 0;
+    }
+}
+
+
+void set_ledgeclimbing()
+{
+    if (Player.stateAnim != PLAYER_STATE_LEDGE_CLIMB)
+    {
+        Player.stateAnim = PLAYER_STATE_LEDGE_CLIMB;
+
+        Player.anim_frame = PLAYER_FRAME_LEDGE_CLIMB_1;
         Player.current_framerate = 0;
     }
 }
@@ -1038,7 +1086,7 @@ void initWorld()
     Serial.printf("NB_WORLD_ENNEMIES:%d\n", NB_WORLD_ENNEMIES);
 
     Serial.printf("TILE SIZE:%d  WORLD SIZE:%d\n", sizeof(TworldTile), sizeof(WORLD));
-    
+
     NB_WORLD_ITEMS = 0;
     CURRENT_QUEUE_ITEMS = 0;
 
@@ -1053,13 +1101,22 @@ void drawPlayer()
         Player.fTouchCountDown -= fElapsedTime;
 
         //if (fmod(Player.fTouchCountDown, 2) == 0)
-          //  return;
+        //  return;
     }
 
     switch (Player.stateAnim)
     {
+    case PLAYER_STATE_WALL_CLIMBING:
+        anim_player_wall_climbin();
+        break;
+    case PLAYER_STATE_WALL_SLIDING:
+        anim_player_wall_sliding();
+        break;
     case PLAYER_STATE_WALK:
         anim_player_walk();
+        break;
+    case PLAYER_STATE_LEDGE_CLIMB:
+        anim_player_ledge_climbing();
         break;
     case PLAYER_STATE_JUMP:
     case PLAYER_STATE_DOUBLE_JUMP:
@@ -1251,7 +1308,7 @@ void drawItems()
             if (((currentItem->worldX >= (worldMIN_X - 1)) && (currentItem->worldX <= (worldMAX_X + 1))) &&
                 ((currentItem->worldY >= (worldMIN_Y - 1)) && (currentItem->worldY <= (worldMAX_Y + 1))))
             {
-                if (rayCastTo(Player.pos.worldX, Player.pos.worldY, currentItem->worldX, currentItem->worldY))
+                //if (rayCastTo(Player.pos.worldX, Player.pos.worldY, currentItem->worldX, currentItem->worldY))
                     drawItem(currentItem);
             }
         }
@@ -1376,7 +1433,7 @@ void drawEnnemies()
             if (((currentEnnemy->worldX >= (worldMIN_X - 1)) && (currentEnnemy->worldX <= (worldMAX_X + 1))) &&
                 ((currentEnnemy->worldY >= (worldMIN_Y - 1)) && (currentEnnemy->worldY <= (worldMAX_Y + 1))))
             {
-                if (rayCastTo(Player.pos.worldX, Player.pos.worldY, currentEnnemy->worldX, currentEnnemy->worldY))
+                //if (rayCastTo(Player.pos.worldX, Player.pos.worldY, currentEnnemy->worldX, currentEnnemy->worldY))
                     drawEnnemy(currentEnnemy);
             }
         }
@@ -1452,11 +1509,11 @@ void drawTiles()
 #ifdef USE_FOV
     for (int wX = worldMIN_X; wX < worldMAX_X; wX++)
     {
-            for (int wY = worldMIN_Y; wY < worldMAX_Y; wY++)
-            {
-                    TworldTile *brick = &WORLD[wY][wX];
-                    brick->light_hit = 0;
-            }
+        for (int wY = worldMIN_Y; wY < worldMAX_Y; wY++)
+        {
+            TworldTile *brick = &WORLD[wY][wX];
+            brick->light_hit = 0;
+        }
     }
     do_fov(Player.pos.worldX, Player.pos.worldY, 5);
 #endif
@@ -1503,7 +1560,6 @@ void drawTiles()
                                 light_hit |= 8;
                             else if (wX < Player.pos.worldX)
                                 light_hit |= 2;
-                            
                         }
 #else
                         if (wX >= playerLightStartX && wX <= playerLightEndX && wY >= playerLightStartY && wY <= playerLightEndY)
@@ -1521,10 +1577,9 @@ void drawTiles()
                                     light_hit |= 8;
                                 else if (wY > Player.pos.worldY)
                                     light_hit |= 2;
-                                
                             }
                         }
-#endif                        
+#endif
                         //   curLight = curLight + AMBIENT_LIGHT_INTENSITY;
                         curLight = min(curLight, MAX_LIGHT_INTENSITY);
                     }
@@ -1764,12 +1819,12 @@ void drawParticles()
     
     if (velX > 0) {
       velX++;
-    } else {
+    }else {
       velX--;
     }
     if (velY > 0) {
       velY++;
-    } else {
+    }else {
       velY--;
     }
 */
@@ -1802,7 +1857,7 @@ void debugInfos()
     if ((lastX != Player.pos.worldX) || (lastY != Player.pos.worldY))
     {
         Serial.printf("WPos1:%d,%d\n", Player.pos.worldX, Player.pos.worldY);
-        Serial.printf("Pix:%d,%d\n", Player.pos.pX, Player.pos.pY);
+        Serial.printf("Pix:%f,%f\n", Player.pos.pX, Player.pos.pY);
 
         lastX = Player.pos.worldX;
         lastY = Player.pos.worldY;
@@ -1820,10 +1875,17 @@ void debugInfos()
     int debugXU = debugX;
     int debugYU = (((Player.pos.YUp) - worldMIN_Y) * 16) - currentOffset_Y;
 
-    canvas->drawRect(debugX, debugY, 16, 16, ARCADA_WHITE);
+//    canvas->drawRect(debugX, debugY, 16, 16, ARCADA_WHITE);
     canvas->drawRect(debugXF, debugYF, 16, 16, ARCADA_RED);
-    canvas->drawRect(debugXD, debugYD, 16, 16, ARCADA_GREENYELLOW);
-    canvas->drawRect(debugXU, debugYU, 16, 16, ARCADA_CYAN);
+//    canvas->drawRect(debugXD, debugYD, 16, 16, ARCADA_GREENYELLOW);
+//    canvas->drawRect(debugXU, debugYU, 16, 16, ARCADA_CYAN);
+
+    int ledgeF_X = Player.ledgePos2.x  - cameraX;
+    int ledgeF_Y = Player.ledgePos2.y  - cameraY;
+    int ledgeD_X = Player.ledgePos1.x  - cameraX;
+    int ledgeD_Y = Player.ledgePos1.y  - cameraY;
+    canvas->drawRect(ledgeF_X, ledgeF_Y, 16, 16, ARCADA_BLUE);
+    canvas->drawRect(ledgeD_X, ledgeD_Y, 16, 16, ARCADA_WHITE);
 
     //   canvas->drawRect((Player.pos.pX - (worldMIN_X * 16)) - currentOffset_X, (Player.pos.pY - (worldMIN_Y * 16)) - currentOffset_Y, 16, 16, ARCADA_BLUE);
 
@@ -1847,13 +1909,13 @@ void debugInfos()
 void drawEffects()
 {
     // @todo : pas vraiment ici que ce devrait etre fait...
-    if (counterActionB > 0)
+    if (timerActionB > 0)
     {
         if (currentTileTarget.tile->id != BLOCK_AIR && currentTileTarget.tile->id != BLOCK_UNDERGROUND_AIR)
         {
             //Test action pour le sprite, pour l'instant la pioche
             // drawSprite(currentTileTarget.pX, currentTileTarget.pY, pioche.width, pioche.height, pioche.pixel_data, Player.pos.direction);
-            if (fmod(counterActionB, TIME_ANIM_ACTION_B) == 0)
+            if (fmod(timerActionB, TIME_ANIM_ACTION_B) == 0)
             {
                 uint8_t direction = 0;
                 if (currentTileTarget.wY > Player.pos.worldY)
@@ -1866,7 +1928,7 @@ void drawEffects()
                 }
                 else
                 {
-                    if (Player.pos.direction > 0)
+                    if (Player.pos.direction == DIRECTION_RIGHT)
                         direction = Direction_Left | Direction_Bottom | Direction_Up;
                     else
                         direction = Direction_Right | Direction_Bottom | Direction_Up;
@@ -1973,7 +2035,7 @@ void drawWorld()
 
     drawHud();
 
-    // debugInfos();
+    //debugInfos();
 }
 
 void pixelToWorld(int *pX, int *pY)
@@ -1987,66 +2049,84 @@ static int multipliers[4][8] = {
     {1, 0, 0, -1, -1, 0, 0, 1},
     {0, 1, -1, 0, 0, -1, 1, 0},
     {0, 1, 1, 0, 0, -1, -1, 0},
-    {1, 0, 0, 1, -1, 0, 0, -1}
-};
+    {1, 0, 0, 1, -1, 0, 0, -1}};
 
-inline void cast_light(int x, int y, int radius, int row, float start_slope, float end_slope, int xx, int xy, int yx, int yy) {
-    if (start_slope < end_slope) {
+inline void cast_light(int x, int y, int radius, int row, float start_slope, float end_slope, int xx, int xy, int yx, int yy)
+{
+    if (start_slope < end_slope)
+    {
         return;
     }
     float next_start_slope = start_slope;
     int radius2 = radius * radius;
-    for (int i = row; i <= radius; i++) {
+    for (int i = row; i <= radius; i++)
+    {
         bool blocked = false;
-        for (int dx = -i, dy = -i; dx <= 0; dx++) {
+        for (int dx = -i, dy = -i; dx <= 0; dx++)
+        {
             float l_slope = (dx - 0.5) / (dy + 0.5);
             float r_slope = (dx + 0.5) / (dy - 0.5);
-            if (start_slope < r_slope) {
+            if (start_slope < r_slope)
+            {
                 continue;
-            } else if (end_slope > l_slope) {
+            }
+            else if (end_slope > l_slope)
+            {
                 break;
             }
 
             int sax = dx * xx + dy * xy;
             int say = dx * yx + dy * yy;
             if ((sax < 0 && (int)abs(sax) > x) ||
-                    (say < 0 && (int)abs(say) > y)) {
+                (say < 0 && (int)abs(say) > y))
+            {
                 continue;
             }
             int ax = x + sax;
             int ay = y + say;
-            if (ax >= WORLD_WIDTH || ay >= WORLD_HEIGHT) {
+            if (ax >= WORLD_WIDTH || ay >= WORLD_HEIGHT)
+            {
                 continue;
             }
 
-            if ((int)(dx * dx + dy * dy) < radius2) {
+            if ((int)(dx * dx + dy * dy) < radius2)
+            {
                 WORLD[ay][ax].light_hit = 1;
             }
 
-            if (blocked) {
-                if (!WORLD[ay][ax].traversable) {
+            if (blocked)
+            {
+                if (!WORLD[ay][ax].traversable)
+                {
                     next_start_slope = r_slope;
                     continue;
-                } else {
+                }
+                else
+                {
                     blocked = false;
                     start_slope = next_start_slope;
                 }
-            } else if (!WORLD[ay][ax].traversable) {
+            }
+            else if (!WORLD[ay][ax].traversable)
+            {
                 blocked = true;
                 next_start_slope = r_slope;
                 cast_light(x, y, radius, i + 1, start_slope, l_slope, xx, xy, yx, yy);
             }
         }
-        if (blocked) {
+        if (blocked)
+        {
             break;
         }
     }
 }
 
-void do_fov(int x, int y, int radius) {
-    for (int i = 0; i < 8; i++) {
+void do_fov(int x, int y, int radius)
+{
+    for (int i = 0; i < 8; i++)
+    {
         cast_light(x, y, radius, 1, 1.0, 0.0, multipliers[0][i],
-                multipliers[1][i], multipliers[2][i], multipliers[3][i]);
+                   multipliers[1][i], multipliers[2][i], multipliers[3][i]);
     }
 }
 #endif
@@ -2149,13 +2229,12 @@ inline bool rayCastTo(int origin_x, int origin_y, int dest_x, int dest_y)
     }
 }
 
-
 void updatePlayerWorldCoords()
 {
     Player.pos.worldX = (Player.pos.pX + 8) / 16;
     Player.pos.worldY = (Player.pos.pY + 8) / 16;
 
-    if (Player.pos.direction <= 0)
+    if (Player.pos.direction == DIRECTION_LEFT)
     {
         Player.pos.XFront = (Player.pos.pX - 1) / 16;
         Player.pos.XFront = max(Player.pos.XFront, 0);
@@ -2169,14 +2248,14 @@ void updatePlayerWorldCoords()
     Player.pos.YDown = min(Player.pos.YDown, WORLD_HEIGHT - 1);
 
     Player.pos.YUp = (Player.pos.pY - 1) / 16;
-    Player.pos.YDown = max(Player.pos.YDown, 0);
+    Player.pos.YUp = max(Player.pos.YUp, 0);
 }
 
 void updateCamera()
 {
     int16_t currentCameraX = cameraX;
     int16_t currentCameraY = cameraY;
-    int16_t cameraAheadX = Player.pos.direction > 0 ? CAMERA_AHEAD_AMOUNT : -CAMERA_AHEAD_AMOUNT;
+    int16_t cameraAheadX = Player.pos.direction * CAMERA_AHEAD_AMOUNT;
     //cameraX et cameraY sont la position en world pixels du coin en haut a gauche, qui suit le player
     cameraX = (Player.pos.pX - HALF_SCREEN_WIDTH) + cameraAheadX;
 
@@ -2275,13 +2354,21 @@ bool playerPickupItem(Titem *currentItem)
     return ret;
 }
 
+inline void setPlayerPos(float x, float y)
+{
+    Player.pos.pX = Player.pos.newX = x;
+    Player.pos.pY = Player.pos.newY = y;
+}
+
 void checkPlayerState()
 {
-    brique_PLAYER_TL = getWorldAtPix(Player.pos.pX, Player.pos.pY);
-    brique_PLAYER_BL = getWorldAtPix(Player.pos.pX, Player.pos.pY + 15);
-    brique_PLAYER_TR = getWorldAtPix(Player.pos.pX + 15, Player.pos.pY);
-    brique_PLAYER_BR = getWorldAtPix(Player.pos.pX + 15, Player.pos.pY + 15);
-    
+    brique_PLAYER_TL = getWorldAtPix(Player.pos.pX + PLAYER_X_BDM, Player.pos.pY);
+    brique_PLAYER_BL = getWorldAtPix(Player.pos.pX + PLAYER_X_BDM, Player.pos.pY + 16);
+    brique_PLAYER_TR = getWorldAtPix(Player.pos.pX + (15 - PLAYER_X_BDM), Player.pos.pY);
+    brique_PLAYER_BR = getWorldAtPix(Player.pos.pX + (15 - PLAYER_X_BDM), Player.pos.pY + 16);
+
+    TworldTile briqueUpAndHalf = getWorldAtPix(Player.pos.pX + 8, Player.pos.pY - 8);
+    TworldTile briqueDownAndHalf = getWorldAtPix(Player.pos.pX + 8, Player.pos.pY + 24);
     //Au dessus
     brique_UP = getWorldAt(Player.pos.worldX, Player.pos.YUp);
 
@@ -2292,8 +2379,14 @@ void checkPlayerState()
     //Devant
     brique_FRONT = getWorldAt(Player.pos.XFront, Player.pos.worldY);
 
+    //Pour detection des bords
+    if (Player.pos.direction == DIRECTION_RIGHT)
+        brique_LEDGE = getWorldAtPix(Player.pos.pX + 16, Player.pos.pY);
+    else
+        brique_LEDGE = getWorldAtPix(Player.pos.pX - 1, Player.pos.pY);
+
     uint8_t oldWater = Player.waterLevel;
-    Player.waterLevel = max(brique_PLAYER_BL.Level , brique_PLAYER_BR.Level);
+    Player.waterLevel = max(brique_PLAYER_BL.Level, brique_PLAYER_BR.Level);
 
     Player.bSplashIn = false;
     Player.bSplashOut = false;
@@ -2306,9 +2399,116 @@ void checkPlayerState()
     {
         Player.bSplashOut = true;
     }
-    else if (oldWater <=2  && Player.waterLevel >= 5)
+    else if (oldWater <= 2 && Player.waterLevel >= 5)
     {
         Player.bSplashIn = true;
+    }
+
+    if (!brique_PLAYER_BL.traversable || !brique_PLAYER_BR.traversable)
+        Player.bOnGround = true;
+    else
+        Player.bOnGround = false;
+
+    //Ground
+    if (Player.onGroundTimer > 0)
+        Player.onGroundTimer -= fElapsedTime;
+    if (Player.bOnGround)
+        Player.onGroundTimer = TIME_GROUND_LATENCY;
+
+    if (Player.wallJumpTimer > 0)
+    {
+        Player.wallJumpTimer -= fElapsedTime;
+        if (Player.bHasWallJumped && Player.wantedHorizontalDirection == -Player.lastWallJumpDirection)
+        {
+            Player.wallJumpTimer = 0;
+            Player.pos.speedY = 0;
+            Player.bHasWallJumped = false;
+        }
+    }
+    else
+        Player.bHasWallJumped = false;
+
+    //    Serial.printf("Player: onGround:%d Falling:%d speedY:%f\n", Player.bOnGround, Player.bFalling, Player.pos.speedY);
+
+    Player.bTouchingWall = (!brique_FRONT.traversable);
+    Player.bTouchingLedge = (!brique_LEDGE.traversable);
+
+    //On slide que sur les mur "hauts" qu'on touche et si on descend
+    Player.bWallClimbing = false;
+    Player.bWallSliding = false;
+    if (Player.bTouchingWall && !Player.bClimbingLedge)
+    {
+        //Sliding et climbing
+        if (Player.pos.speedY >= 0 && briqueDownAndHalf.traversable)
+        {
+            Player.bFalling = false;
+            Player.bJumping = false;
+            Player.bDoubleJumping = false;
+            Player.bWallSliding = true;
+            Player.bWallClimbing = false;
+        }
+        else if (Player.pos.speedY < 0 && Player.wantedVerticalDirection == DIRECTION_UP && !Player.bJumping)
+        {
+            Player.bFalling = false;
+            Player.bJumping = false;
+            Player.bDoubleJumping = false;
+            Player.bWallSliding = false;
+            Player.bWallClimbing = true;
+        }
+    
+        //Ledge..
+        if (Player.bWallClimbing && !Player.bTouchingLedge && !Player.bLedgeDetected)
+        {            
+            Player.bLedgeDetected = true;
+   
+            if (Player.pos.direction == DIRECTION_RIGHT)
+                Player.ledgePosTop.x = Player.pos.XFront * 16;
+            else
+                Player.ledgePosTop.x = (Player.pos.XFront * 16) + 15;
+
+            Player.ledgePosTop.y = Player.pos.worldY * 16;
+        }
+    }
+
+    //Ledge, peut forcer la position du joueur le temps de l'anim
+    CheckLedgeClimb();
+}
+
+void CheckLedgeClimb()
+{
+    if (Player.bLedgeDetected && !Player.bClimbingLedge)
+    {
+        Player.bClimbingLedge = true;
+        Player.bFalling = false;
+        Player.bJumping = false;
+        Player.bDoubleJumping = false;
+        Player.bWallSliding = false;
+        Player.bWallClimbing = false;
+
+        if (Player.pos.direction == DIRECTION_RIGHT)
+        {
+            Player.ledgePos1.x = (Player.ledgePosTop.x - 16) - ledgeClimbXOffset1;
+            Player.ledgePos1.y = (Player.ledgePosTop.y) - 0 - ledgeClimbYOffset1;
+
+            Player.ledgePos2.x = (Player.ledgePosTop.x + 0) + ledgeClimbXOffset2;
+            Player.ledgePos2.y = (Player.ledgePosTop.y) - 16 - ledgeClimbYOffset2;
+        }
+        else
+        {
+            Player.ledgePos1.x = (Player.ledgePosTop.x + 1) + ledgeClimbXOffset1;
+            Player.ledgePos1.y = (Player.ledgePosTop.y) - 0 - ledgeClimbYOffset1;
+
+            Player.ledgePos2.x = (Player.ledgePosTop.x - 15) - ledgeClimbXOffset2;
+            Player.ledgePos2.y = (Player.ledgePosTop.y) - 16 - ledgeClimbYOffset2;
+        }
+
+        Player.bCanMove = false;
+        Player.bCanFlip = false;
+    }
+    //On force la position (anim de montee)
+    if (Player.bClimbingLedge)
+    {
+        setPlayerPos(Player.ledgePos1.x, Player.ledgePos1.y);
     }
 }
 
@@ -2411,8 +2611,8 @@ void updatePlayer()
     else if (bWin)
     {
         if ((brique_FRONT.traversable) &&
-            ((Player.pos.direction > 0 && (Player.pos.pX < ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH)) ||
-             (Player.pos.direction < 0 && (Player.pos.pX >= 2))))
+            ((Player.pos.direction == DIRECTION_RIGHT && (Player.pos.pX < ((WORLD_WIDTH - 1) * 16) - ARCADA_TFT_WIDTH)) ||
+             (Player.pos.direction == DIRECTION_LEFT && (Player.pos.pX >= 2))))
         {
             Player.pos.pX += 1;
             Player.bWalking = true;
@@ -2448,13 +2648,14 @@ void updatePlayer()
         }
 #else
         checkPlayerInputs();
+        applyMovements();
+        checkMovementDirection();
         updatePlayerVelocities();
         updatePlayerPosition();
 
         checkPlayerCollisionsWorld();
         updatePlayerWorldCoords();
         checkPlayerState();
-
         checkPlayerCollisionsEntities();
 #endif
 
@@ -2466,7 +2667,7 @@ void updatePlayer()
 
 void computePlayerAnimations()
 {
-    if (counterActionB > 0)
+    if (timerActionB > 0)
     {
         //@todo : Test type action,
         //pour le moment dig
@@ -2474,7 +2675,19 @@ void computePlayerAnimations()
     }
     else
     {
-        if (Player.bJumping || Player.bDoubleJumping)
+        if (Player.bClimbingLedge)
+        {
+            set_ledgeclimbing();
+        }
+        else if (Player.bWallClimbing)
+        {
+            set_wall_climbing();
+        }
+        else if (Player.bWallSliding)
+        {
+            set_sliding();
+        }
+        else if (Player.bJumping || Player.bDoubleJumping)
         {
             set_jumping();
         }
@@ -2484,28 +2697,27 @@ void computePlayerAnimations()
         }
         else
         {
-            if (Player.bOnGround)
+            //    if (Player.bOnGround)
+
+            if (Player.bLanding)
             {
-                if (Player.bLanding)
+                //Anim aterrissage ?
+                set_dust_fx();
+            }
+
+            if (Player.bWantWalk) // demannde de deplacement)
+            {
+                if (Player.bWalking) //On a bougé
                 {
-                    //Anim aterrissage ?
-                    set_dust_fx();
+                    set_walking();
+                    //set_dust_fx();
                 }
-                
-                if (Player.bWantWalk) // demannde de deplacement)
-                {
-                    if (Player.bWalking) //On a bougé
-                    {
-                        set_walking();
-                        //set_dust_fx();
-                    }
-                    else // @todo push
-                        set_idle();
-                }
-                else
-                {
+                else // @todo push
                     set_idle();
-                }
+            }
+            else
+            {
+                set_idle();
             }
         }
         if (Player.bSplashIn)
@@ -2515,7 +2727,7 @@ void computePlayerAnimations()
         else if (Player.bSplashOut)
         {
             set_splash_fx();
-        }        
+        }
     }
 }
 
@@ -2613,7 +2825,7 @@ void checkEnnemyCollisionsWorld(Tennemy *currentEnnemy)
         TworldTile tileTR = getWorldAtPix(currentEnnemy->newX + 15, currentEnnemy->newY);
         if ((!tileTL.traversable) || (!tileTR.traversable))
         {
-            currentEnnemy->newY = (currentEnnemy->newY - fmod(currentEnnemy->newY,16)) + 16;
+            currentEnnemy->newY = (currentEnnemy->newY - fmod(currentEnnemy->newY, 16)) + 16;
             currentEnnemy->speedY = 0;
         }
         else
@@ -2897,15 +3109,11 @@ void updatePlayerVelocities()
     if (Player.bUnderWater) //Tete sous l'eau
     {
         //Gravity
-        if (everyXFrames(5)) //Probleme, faut passer en float...en attendant on saute des frame...
-        {
-            Player.pos.speedY = Player.pos.speedY + FALLING_SPEED * fElapsedTime;
+        Player.pos.speedY = Player.pos.speedY + (FALLING_SPEED / 5) * fElapsedTime;
 
-        
-			Player.pos.speedX += -2.0f * Player.pos.speedX * fElapsedTime;
-			if (fabs(Player.pos.speedX) < 0.01f)
-				Player.pos.speedX = 0.0f; 
-        }      //Attention du coup le onground ne marchge plus
+        Player.pos.speedX += -2.0f * Player.pos.speedX * fElapsedTime;
+        if (fabs(Player.pos.speedX) < 0.01f)
+            Player.pos.speedX = 0.0f;
 
         if (Player.pos.speedX > (MAX_SPEED_X >> 1))
             Player.pos.speedX = (MAX_SPEED_X >> 1);
@@ -2919,27 +3127,63 @@ void updatePlayerVelocities()
     }
     else
     {
-        //Gravity
-         Player.pos.speedY = Player.pos.speedY + (FALLING_SPEED * fElapsedTime);
-        //else...
-
-        //Frotements, a revoir
-        if (Player.bOnGround)
+        if (Player.bWallSliding)
         {
-			Player.pos.speedX += -10.0f * Player.pos.speedX * fElapsedTime; 
-			if (fabs(Player.pos.speedX) < 0.01f)
-				Player.pos.speedX = 0.0f; 
+            Player.pos.speedY = Player.pos.speedY + (WALL_SLIDE_SPEED * fElapsedTime);
+
+            if (Player.pos.speedY > MAX_SPEED_Y_SLIDING)
+                Player.pos.speedY = MAX_SPEED_Y_SLIDING;
+            else if (Player.pos.speedY < -MAX_SPEED_Y)
+                Player.pos.speedY = -MAX_SPEED_Y;
         }
+        else if (Player.bWallClimbing)
+        {
+            //Player.pos.speedY = Player.pos.speedY + (WALL_SLIDE_SPEED * fElapsedTime);
 
-        if (Player.pos.speedX > MAX_SPEED_X)
-            Player.pos.speedX = MAX_SPEED_X;
-        else if (Player.pos.speedX < -MAX_SPEED_X)
-            Player.pos.speedX = -MAX_SPEED_X;
+            if (Player.pos.speedY > MAX_SPEED_Y_CLIMBING)
+                Player.pos.speedY = MAX_SPEED_Y_CLIMBING;
+            else if (Player.pos.speedY < -MAX_SPEED_Y_CLIMBING)
+                Player.pos.speedY = -MAX_SPEED_Y_CLIMBING;
+        }
+        else 
+        {
+            //Gravity
+            //if (!Player.bOnGround)
+            Player.pos.speedY = Player.pos.speedY + (FALLING_SPEED * fElapsedTime);
 
-        if (Player.pos.speedY > MAX_SPEED_Y)
-            Player.pos.speedY = MAX_SPEED_Y;
-        else if (Player.pos.speedY < -MAX_SPEED_Y)
-            Player.pos.speedY = -MAX_SPEED_Y;
+            //Frotements, a revoir
+            if (Player.bOnGround)
+            {
+                Player.pos.speedX += -10.0f * Player.pos.speedX * fElapsedTime;
+                if (fabs(Player.pos.speedX) < 0.01f)
+                    Player.pos.speedX = 0.0f;
+            }
+            else
+            {
+                //Air frotements
+                Player.pos.speedX += -3.0f * Player.pos.speedX * fElapsedTime;
+                if (fabs(Player.pos.speedX) < 0.01f)
+                    Player.pos.speedX = 0.0f;
+            }
+
+            if (Player.pos.speedX > MAX_SPEED_X)
+                Player.pos.speedX = MAX_SPEED_X;
+            else if (Player.pos.speedX < -MAX_SPEED_X)
+                Player.pos.speedX = -MAX_SPEED_X;
+
+            if (Player.pos.speedY > MAX_SPEED_Y)
+                Player.pos.speedY = MAX_SPEED_Y;
+            else if (Player.pos.speedY < -MAX_SPEED_Y)
+                Player.pos.speedY = -MAX_SPEED_Y;
+        }
+    }
+}
+
+inline void Flip()
+{
+    if (!Player.bWallSliding && !Player.bWallClimbing && Player.bCanFlip) // && !knockback)
+    {
+        Player.pos.direction = -Player.pos.direction;
     }
 }
 
@@ -2967,22 +3211,8 @@ void checkPlayerCollisionsWorld()
 {
     bool bWasOnGround = Player.bOnGround;
 
-    Player.bOnLeftWall = Player.bOnRightWall = false;
     //X
-    if (Player.pos.speedX <= 0)
-    {
-        // +0 +0
-        // +0 +15
-        TworldTile tileTL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + PLAYER_Y_BDM);
-        TworldTile tileBL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + 15);
-        if (!tileTL.traversable || !tileBL.traversable)
-        {
-            Player.pos.newX = (Player.pos.newX - fmod(Player.pos.newX, 16)) + (16 - PLAYER_X_BDM);
-            Player.pos.speedX = 0;
-            Player.bOnLeftWall = true;
-        }
-    }
-    else if (Player.pos.speedX > 0)
+    if (Player.pos.speedX > 0)
     {
         // +16 +0
         // +16 +15
@@ -2992,9 +3222,21 @@ void checkPlayerCollisionsWorld()
         {
             Player.pos.newX = (Player.pos.newX - fmod(Player.pos.newX, 16)) + PLAYER_X_BDM;
             Player.pos.speedX = 0;
-            Player.bOnRightWall = true;
         }
     }
+    else if (Player.pos.speedX < 0)
+    {
+        // +0 +0
+        // +0 +15
+        TworldTile tileTL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + PLAYER_Y_BDM);
+        TworldTile tileBL = getWorldAtPix(Player.pos.newX + PLAYER_X_BDM, Player.pos.pY + 15);
+        if (!tileTL.traversable || !tileBL.traversable)
+        {
+            Player.pos.newX = (Player.pos.newX - fmod(Player.pos.newX, 16)) + (16 - PLAYER_X_BDM);
+            Player.pos.speedX = 0;
+        }
+    }
+    
     //Y
     Player.bJumping = false;
     Player.bFalling = false;
@@ -3015,11 +3257,12 @@ void checkPlayerCollisionsWorld()
         }
         else
         {
-            Player.bJumping = true;
+            if (Player.bWantJump || Player.bWantDoubleJump)
+                Player.bJumping = true;
         }
     }
-    else // if (Player.pos.speedY >= 0)
-    {        
+    else if (Player.pos.speedY > 0)
+    {
         //+5 et +12 au lieu de +0 et +15 pour compenser la boundingbox du sprite => NON car cause bug de saut en diagonale
         // +0 +16
         // +15 +16
@@ -3031,7 +3274,7 @@ void checkPlayerCollisionsWorld()
             Player.pos.newY = Player.pos.newY - fmod(Player.pos.newY, 16);
             Player.bOnGround = true;
             Player.bFalling = false;
-           //Si la vitesse etait importante on vient d'atterir, spawn effect
+            //Si la vitesse etait importante on vient d'atterir, spawn effect
             if (!bWasOnGround && Player.pos.speedY >= SPEED_Y_LANDING)
                 Player.bLanding = true;
 
@@ -3045,19 +3288,6 @@ void checkPlayerCollisionsWorld()
         }
     }
 
-    //Ground
-    if (Player.onGroundCounter > 0)
-        Player.onGroundCounter -= fElapsedTime;
-    if (Player.bOnGround)
-        Player.onGroundCounter = TIME_GROUND_LATENCY;
-
-//    Serial.printf("Player: onGround:%d Falling:%d speedY:%f\n", Player.bOnGround, Player.bFalling, Player.pos.speedY);
-
-    if (Player.onWallCounter  > 0)
-        Player.onWallCounter -= fElapsedTime;
-    if (Player.bOnLeftWall || Player.bOnRightWall)
-        Player.onWallCounter = TIME_WALL_LATENCY;
-
     //Walking
     Player.bWalking = false;
     if (Player.pos.pX != Player.pos.newX)
@@ -3067,25 +3297,49 @@ void checkPlayerCollisionsWorld()
     }
 
     Player.bMovingUpDown = false;
-    if (Player.pos.pY != Player.pos.newY )
+    if (Player.pos.pY != Player.pos.newY)
     {
         Player.bMovingUpDown = true;
         Player.pos.pY = Player.pos.newY;
     }
-
 }
 
 void checkPlayerInputs()
 {
     Player.bWantJump = false;
     Player.bWantDoubleJump = false;
-    Player.bWantWalk = false;
 
-    if (A_just_pressedCounter > 0)
-        A_just_pressedCounter -= fElapsedTime;
+    if (A_just_pressedTimer > 0)
+        A_just_pressedTimer -= fElapsedTime;
 
-    if (Player.jumpCounter > 0)
-        Player.jumpCounter -= fElapsedTime;
+    if (Player.jumpTimer > 0)
+        Player.jumpTimer -= fElapsedTime;
+
+    /*
+    if (Player.turnTimer > 0)
+    {
+        Player.turnTimer -= fElapsedTime;
+
+        if(Player.turnTimer <= 0)
+        {
+            Player.bCanMove = true;
+            Player.bCanFlip = true;
+        }
+    }*/
+
+    if (pressed_buttons & ARCADA_BUTTONMASK_UP)
+        Player.wantedVerticalDirection = DIRECTION_LEFT;
+    else if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
+        Player.wantedVerticalDirection = DIRECTION_RIGHT;
+    else
+        Player.wantedVerticalDirection = DIRECTION_NONE;
+
+    if (pressed_buttons & ARCADA_BUTTONMASK_LEFT)
+        Player.wantedHorizontalDirection = DIRECTION_UP;
+    else if (pressed_buttons & ARCADA_BUTTONMASK_RIGHT)
+        Player.wantedHorizontalDirection = DIRECTION_DOWN;
+    else
+        Player.wantedHorizontalDirection = DIRECTION_NONE;
 
     if (just_pressed & ARCADA_BUTTONMASK_SELECT)
     {
@@ -3107,20 +3361,20 @@ void checkPlayerInputs()
     //@todo : virer le test onGround pour attaques aeriennes..
     if (coolDownActionB <= 0 && (pressed_buttons & ARCADA_BUTTONMASK_B) && Player.bOnGround)
     {
-        counterActionB += fElapsedTime;
+        timerActionB += fElapsedTime;
 
         int lastCibleX = currentTileTarget.wX;
         int lastCibleY = currentTileTarget.wY;
 
         //Ciblage, on laisse un peu de temps pour locker la cible
-        if (counterActionB < TIME_LOCK_ACTION_B)
+        if (timerActionB < TIME_LOCK_ACTION_B)
         {
-            if (pressed_buttons & ARCADA_BUTTONMASK_UP)
+            if (Player.wantedVerticalDirection == DIRECTION_UP)
             {
                 currentTileTarget.wX = Player.pos.worldX;
                 currentTileTarget.wY = Player.pos.YUp;
             }
-            else if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
+            else if (Player.wantedVerticalDirection == DIRECTION_DOWN)
             {
                 currentTileTarget.wX = Player.pos.worldX;
                 currentTileTarget.wY = Player.pos.YDown;
@@ -3134,7 +3388,7 @@ void checkPlayerInputs()
 
             if (currentTileTarget.wX != lastCibleX || currentTileTarget.wY != lastCibleY)
             {
-                counterActionB = 0;
+                timerActionB = 0;
                 currentTileTarget.pX = currentTileTarget.wX * 16;
                 currentTileTarget.pY = currentTileTarget.wY * 16;
                 currentTileTarget.tile = &WORLD[currentTileTarget.wY][currentTileTarget.wX];
@@ -3160,11 +3414,11 @@ void checkPlayerInputs()
         }
         else
         {
-            if (counterActionB >= TIME_ACTION_B) //Action (pour le moment minage seulement)
+            if (timerActionB >= TIME_ACTION_B) //Action (pour le moment minage seulement)
             {
                 TworldTile *tile = currentTileTarget.tile;
                 currentTileTarget.tile->hit = 0;
-                counterActionB = 0;
+                timerActionB = 0;
                 coolDownActionB = TIME_COOLDOWN_B;
                 lastCibleX = lastCibleY = 0;
                 bool bHit = false;
@@ -3233,7 +3487,7 @@ void checkPlayerInputs()
                         }
                         else
                         {
-                            if (Player.pos.direction > 0)
+                            if (Player.pos.direction == DIRECTION_RIGHT)
                                 direction = Direction_Left | Direction_Bottom | Direction_Up;
                             else
                                 direction = Direction_Right | Direction_Bottom | Direction_Up;
@@ -3253,32 +3507,90 @@ void checkPlayerInputs()
         if (coolDownActionB > 0)
             coolDownActionB -= fElapsedTime;
 
-        counterActionB = 0;
+        timerActionB = 0;
         if (currentTileTarget.tile != NULL)
             currentTileTarget.tile->hit = 0;
 
         //currentTileTarget = {0};
 
-        if (just_pressed & ARCADA_BUTTONMASK_A)
+        if ((just_pressed & ARCADA_BUTTONMASK_A) || A_just_pressedTimer > 0)
         {
-            A_just_pressedCounter = TIME_JUMP_LATENCY;
-
-            if (Player.onGroundCounter > 0) // && Player.pos.speedY == 0)
-            {
-                Player.onGroundCounter = 0;
-                A_just_pressedCounter = 0;
+            if (Player.bWallSliding && !Player.bOnGround && Player.wantedHorizontalDirection == 0) //(Player.onWallCounter > 0) // && Player.pos.speedY == 0)
+            {                                                                                      //WALLHOP (LACHE LE MUR)
+                A_just_pressedTimer = 0;
                 Player.bWantJump = true;
-                Player.jumpCounter = TIME_DOUBLE_JUMP_DETECTION;
+                Player.jumpTimer = 0;
+                Player.bWallSliding = false;
+                Player.bWallClimbing = false;
+                Player.turnTimer = 0;
+                Player.bCanMove = true;
+                Player.bCanFlip = true;
+                Player.bHasWallJumped = false;
+                Player.wallJumpTimer = 0;
+                Player.pos.direction = -Player.pos.direction;
+                Player.lastWallJumpDirection = Player.pos.direction;
+
+                sndPlayerCanal1.play(AudioSample__Jump);
+                //Thrust
+                Player.pos.speedX = Player.lastWallJumpDirection * WALL_HOP_FORCE_X;
+                Player.pos.speedY = -WALL_HOP_FORCE_Y;
+
+                //Spawn Effect (wall juump)
+                //set_double_jump_fx();
+            }
+            else if (!Player.bOnGround && Player.bTouchingWall && Player.wantedHorizontalDirection != 0) //(Player.onWallCounter > 0) // && Player.pos.speedY == 0)
+            {
+                //WALLJUMP
+                A_just_pressedTimer = 0;
+                Player.bWantJump = true;
+                Player.jumpTimer = 0;
+                Player.bWallSliding = false;
+                Player.bWallClimbing = false;
+                Player.turnTimer = 0;
+                Player.bCanMove = true;
+                Player.bCanFlip = true;
+                Player.bHasWallJumped = true;
+                Player.wallJumpTimer = TIME_WALL_LATENCY;
+                if (Player.wantedHorizontalDirection != Player.pos.direction)
+                {
+                    //Wall jump en face
+                    Player.pos.direction = -Player.pos.direction;
+                    Player.lastWallJumpDirection = Player.pos.direction;
+
+                    //Thrust
+                    Player.pos.speedX = Player.lastWallJumpDirection * WALL_JUMP_FORCE_X;
+                    Player.pos.speedY = -WALL_JUMP_FORCE_Y;
+                }
+                else
+                {
+                    //Wall jump vertical
+                    Player.lastWallJumpDirection = Player.pos.direction;
+
+                    //Thrust
+                    Player.pos.speedX = 0;
+                    Player.pos.speedY = -WALL_JUMP_CLIMB_FORCE_Y;
+                }
+
+                sndPlayerCanal1.play(AudioSample__Jump);
+                //Spawn Effect (wall juump)
+                set_double_jump_fx();
+            }
+            else if (Player.onGroundTimer > 0) // && Player.pos.speedY == 0)
+            {
+                Player.onGroundTimer = 0;
+                A_just_pressedTimer = 0;
+                Player.bWantJump = true;
+                Player.jumpTimer = TIME_DOUBLE_JUMP_DETECTION;
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
                 Player.pos.speedY = -JUMP_FORCE;
                 //Spawn Effect
                 set_double_jump_fx();
             }
-            else if (!Player.bOnGround && !Player.bDoubleJumping && Player.jumpCounter > 0)
+            else if (!Player.bOnGround && !Player.bDoubleJumping && Player.jumpTimer > 0)
             {
-                Player.jumpCounter = 0;
-                A_just_pressedCounter = 0;
+                Player.jumpTimer = 0;
+                A_just_pressedTimer = 0;
                 // @todo spawn dust double jump
                 Player.bWantDoubleJump = true;
                 sndPlayerCanal1.play(AudioSample__Jump);
@@ -3288,115 +3600,72 @@ void checkPlayerInputs()
                 //Spawn Effect
                 set_double_jump_fx(true);
             }
-            else if (Player.onWallCounter)//(Player.onWallCounter > 0) // && Player.pos.speedY == 0)
-            {
-                Player.onWallCounter = 0;
-                A_just_pressedCounter = 0;
-                Player.bWantJump = true;
-                Player.jumpCounter = 0;
-                sndPlayerCanal1.play(AudioSample__Jump);
-                //Thrust
-                Player.pos.speedY = -JUMP_FORCE;
-                if (Player.bOnLeftWall)
-                {
-                    Player.pos.speedX = JUMP_FORCE;
-                    Player.pos.direction = 1;
-                }
-                else
-                {
-                    Player.pos.speedX = -JUMP_FORCE;
-                    Player.pos.direction = -1;
-                }
-                //Spawn Effect (wall juump)
-                set_double_jump_fx();
-            }     
-        }
-        else
-        {
-            //On a clique il y a peu de temps et on touche le sol...on saute
-            if (A_just_pressedCounter && Player.onGroundCounter > 0)
-            {
-                Serial.println("Jump2");
-                Player.onGroundCounter = 0;
-                A_just_pressedCounter = 0;
-                Player.bWantJump = true;
-                Player.jumpCounter = TIME_DOUBLE_JUMP_DETECTION;
-                sndPlayerCanal1.play(AudioSample__Jump);
-                //Thrust
-                Player.pos.speedY = -JUMP_FORCE;
-                //Spawn Effect
-                set_double_jump_fx();
-            }
-            else if (A_just_pressedCounter && Player.onWallCounter > 0)
-            {
-                Player.onWallCounter = 0;
-                A_just_pressedCounter = 0;
-                Player.bWantJump = true;
-                Player.jumpCounter = 0;
-                sndPlayerCanal1.play(AudioSample__Jump);
-                //Thrust
-                Player.pos.speedY = -JUMP_FORCE;
-                if (Player.bOnLeftWall)
-                {
-                    Player.pos.speedX = JUMP_FORCE;
-                    Player.pos.direction = 1;
-                }
-                else
-                {
-                    Player.pos.speedX = -JUMP_FORCE;
-                    Player.pos.direction = -1;
-                }
-                //Spawn Effect (wall jump)
-                set_double_jump_fx();
-            }            
-            else
-            {
-                //Si on relache le bouton on saute moins haut..a tester
-                if ((just_released & ARCADA_BUTTONMASK_A) && Player.pos.speedY < 0)
-                {
-                    Player.pos.speedY = Player.pos.speedY / 2;
-                }
-            }
         }
 
-        if (pressed_buttons & ARCADA_BUTTONMASK_LEFT)
+        //Si on relache le bouton on saute moins haut
+        if ((just_released & ARCADA_BUTTONMASK_A) && Player.pos.speedY < 0)
         {
-            Player.pos.direction = -1;
-            Player.bWantWalk = true;
-            if (Player.bOnGround)
-                Player.pos.speedX += -(RUNNING_SPEED * fElapsedTime);
-            else
-            {
-                if (Player.pos.speedY < 0)
-                    Player.pos.speedX += -(WALKING_SPEED * fElapsedTime);
-            }
+            Player.pos.speedY = Player.pos.speedY / 2;
         }
-        else if (pressed_buttons & ARCADA_BUTTONMASK_RIGHT)
+        /*
+        if (Player.bWallSliding && !Player.bOnGround && Player.wantedHorizontalDirection == -Player.pos.direction)
         {
-            Player.pos.direction = 1;
-            Player.bWantWalk = true;
-            if (Player.bOnGround)
-                Player.pos.speedX += (RUNNING_SPEED * fElapsedTime);
-            else
-            {
-                if (Player.pos.speedY < 0)
-                    Player.pos.speedX += (WALKING_SPEED * fElapsedTime);
+            Player.bCanMove = false;
+            Player.bCanFlip = false;
 
-            }
-        }
+            Player.turnTimer = TURN_TIMER_SET;
+        }*/
+    }
+}
 
-        if (pressed_buttons & ARCADA_BUTTONMASK_UP)
+void applyMovements()
+{
+    if (timerActionB == 0)
+    {
+        if (!Player.bOnGround)
         {
-            if (Player.bOnLeftWall || Player.bOnRightWall)
+            if (Player.bTouchingWall && Player.wantedVerticalDirection != 0)
+            {
+                Player.pos.speedY += (Player.wantedVerticalDirection * CLIMBING_SPEED * fElapsedTime);
+                //On ajoute de la speed x pour l'aider a sortir une fois en haut?
+//                if (Player.wantedVerticalDirection == DIRECTION_UP)
+  //                  Player.pos.speedX = Player.pos.direction * MAX_SPEED_X;
+            }
+            else if (!Player.bWallSliding && !Player.bWallClimbing)   //On flotte dans l'air
+            {
+                Player.pos.speedX += (Player.wantedHorizontalDirection * FLOATING_SPEED * fElapsedTime);
+            }
+        }
+        else if (Player.bCanMove)
+        {
+            Player.pos.speedX += (Player.wantedHorizontalDirection * RUNNING_SPEED * fElapsedTime);
+        }
+        
+/*
+        if (Player.wantedVerticalDirection == DIRECTION_UP)
+        {
+            if (Player.bTouchingWall)
             {
             }
         }
-        else if (pressed_buttons & ARCADA_BUTTONMASK_DOWN)
+        else if (Player.wantedVerticalDirection == DIRECTION_DOWN)
         {
-            if (Player.bOnLeftWall || Player.bOnRightWall)
+            if (Player.bTouchingWall)
             {
             }
-        }
+        }*/
+    }
+}
+
+void checkMovementDirection()
+{
+    Player.bWantWalk = false;
+
+    if (Player.wantedHorizontalDirection != 0)
+    {
+        if (Player.pos.direction != Player.wantedHorizontalDirection)
+            Flip();
+        Player.bWantWalk = true;
     }
 }
 
@@ -3824,7 +4093,17 @@ void loop()
         Serial.printf("LFD:%d\n", lastFrameDurationMs);
         _old_lastFrameDurationMs = lastFrameDurationMs;
     }
-    
+}
+
+void FinishLedgeClimb()
+{
+    Player.bClimbingLedge = false;
+    setPlayerPos(Player.ledgePos2.x, Player.ledgePos2.y);
+
+    Player.bCanMove = true;
+    Player.bCanFlip = true;
+    Player.bLedgeDetected = false;
+    set_idle();
 }
 
 void anim_player_idle()
@@ -3887,6 +4166,50 @@ void anim_player_digging()
     }
 }
 
+void anim_player_wall_climbin()
+{
+    if (Player.current_framerate == PLAYER_FRAMERATE_WALL_CLIMBING)
+    {
+        Player.anim_frame++;
+        Player.current_framerate = 0;
+    }
+    Player.current_framerate++;
+
+    if (Player.anim_frame > PLAYER_FRAME_WALL_CLIMBING_1)
+    {
+        Player.anim_frame = PLAYER_FRAME_WALL_CLIMBING_1; //On reste sur 1
+    }
+
+    switch (Player.anim_frame)
+    {
+    case PLAYER_FRAME_WALL_CLIMBING_1:
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_wall_sliding.width, player_wall_sliding.height, player_wall_sliding.pixel_data, Player.pos.direction);
+        break;
+    }
+}
+
+void anim_player_wall_sliding()
+{
+    if (Player.current_framerate == PLAYER_FRAMERATE_SLIDING)
+    {
+        Player.anim_frame++;
+        Player.current_framerate = 0;
+    }
+    Player.current_framerate++;
+
+    if (Player.anim_frame > PLAYER_FRAME_SLIDING_1)
+    {
+        Player.anim_frame = PLAYER_FRAME_SLIDING_1; //On reste sur 1
+    }
+
+    switch (Player.anim_frame)
+    {
+    case PLAYER_FRAME_SLIDING_1:
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_wall_sliding.width, player_wall_sliding.height, player_wall_sliding.pixel_data, Player.pos.direction);
+        break;
+    }
+}
+
 void anim_player_walk()
 {
     if (Player.current_framerate == PLAYER_FRAMERATE_WALK)
@@ -3924,6 +4247,43 @@ void anim_player_walk()
         break;
     }
 }
+
+void anim_player_ledge_climbing()
+{
+    if (Player.current_framerate == PLAYER_FRAMERATE_LEDGE_CLIMBING)
+    {
+        Player.anim_frame++;
+        Player.current_framerate = 0;
+    }
+    Player.current_framerate++;
+
+    if (Player.anim_frame > PLAYER_FRAME_LEDGE_CLIMB_5)
+    {
+        //On annule tout
+        FinishLedgeClimb();
+        return;
+    }
+
+    switch (Player.anim_frame)
+    {
+    case PLAYER_FRAME_LEDGE_CLIMB_1:
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump1.width, player_jump1.height, player_jump1.pixel_data, Player.pos.direction);
+        break;
+    case PLAYER_FRAME_LEDGE_CLIMB_2:
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump2.width, player_jump2.height, player_jump2.pixel_data, Player.pos.direction);
+        break;
+    case PLAYER_FRAME_LEDGE_CLIMB_3:
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump3.width, player_jump3.height, player_jump3.pixel_data, Player.pos.direction);
+        break;
+    case PLAYER_FRAME_LEDGE_CLIMB_4:
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump4.width, player_jump4.height, player_jump4.pixel_data, Player.pos.direction);
+        break;
+    case PLAYER_FRAME_LEDGE_CLIMB_5:
+        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump5.width, player_jump5.height, player_jump5.pixel_data, Player.pos.direction);
+        break;
+    }
+}
+
 
 void anim_player_jump()
 {
@@ -4117,7 +4477,6 @@ void anim_player_fx_splash()
         drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + baseY, fx_splash5.width, fx_splash5.height, fx_splash5.pixel_data, Player.FX.direction);
         break;
     }
-
 }
 
 #if 0

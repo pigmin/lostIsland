@@ -5,9 +5,12 @@
    #define PLAYER_STATE_IDLE              0
    #define PLAYER_STATE_WALK              1
    #define PLAYER_STATE_JUMP              2
-   #define PLAYER_STATE_DOUBLE_JUMP       4
-   #define PLAYER_STATE_FALL              8
-   #define PLAYER_STATE_DIG               16
+   #define PLAYER_STATE_DOUBLE_JUMP       3
+   #define PLAYER_STATE_FALL              4
+   #define PLAYER_STATE_DIG               5
+   #define PLAYER_STATE_WALL_SLIDING      6
+   #define PLAYER_STATE_LEDGE_CLIMB       7
+   #define PLAYER_STATE_WALL_CLIMBING     8
 
    #define PLAYER_STATE_DIE               64   
    #define PLAYER_STATE_WIN               128
@@ -19,8 +22,20 @@
    #define PLAYER_FRAME_IDLE_3    2
 
    //Jump
-
    #define PLAYER_FRAME_FALLING_1  0
+
+   //Wall sliding
+   #define PLAYER_FRAME_SLIDING_1   0
+
+   //Wall climbining
+   #define PLAYER_FRAME_WALL_CLIMBING_1   0
+
+   //LEDGE climbing
+   #define PLAYER_FRAME_LEDGE_CLIMB_1   0
+   #define PLAYER_FRAME_LEDGE_CLIMB_2   1
+   #define PLAYER_FRAME_LEDGE_CLIMB_3   2
+   #define PLAYER_FRAME_LEDGE_CLIMB_4   3
+   #define PLAYER_FRAME_LEDGE_CLIMB_5   4
 
    //Run
    #define PLAYER_FRAME_WALK_1  0
@@ -66,6 +81,9 @@
    const int PLAYER_FRAMERATE_TOUCH = 2;
    const int PLAYER_FRAMERATE_GROW = 2;
    const int PLAYER_FRAMERATE_WIN = 2;
+   const int PLAYER_FRAMERATE_SLIDING = 1;
+   const int PLAYER_FRAMERATE_LEDGE_CLIMBING = 1;
+   const int PLAYER_FRAMERATE_WALL_CLIMBING = 1;
 
    const int PLAYER_DIE_FRAMES = FPS*3; 
    const int PLAYER_WIN_FRAMES = FPS*8; 

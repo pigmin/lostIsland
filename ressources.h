@@ -23,6 +23,8 @@
 #include "res/player_jump4.c"
 #include "res/player_jump5.c"
 
+#include "res/player_wall_sliding.c"
+
 #include "res/fx_jump1.c"
 #include "res/fx_jump2.c"
 #include "res/fx_jump3.c"

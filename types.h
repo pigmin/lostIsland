@@ -10,6 +10,12 @@
 //Idem axe Y mais seulement en haut (les pieds sont sur le sol)
 #define PLAYER_Y_BDM  4
 
+typedef struct Vector2
+{
+  float x;
+  float y;
+} Vector2;
+
 typedef struct TPos
 {
   float pX, pY;
@@ -52,18 +58,34 @@ typedef struct TPlayer
     int     speedY;
   } FX;
 
+  bool bCanMove;
+  bool bCanFlip;
+  bool bHasWallJumped;
+
   bool bJumping;
-  float jumpCounter;
+  float jumpTimer;
   bool bDoubleJumping;
 
-  bool bOnGround;
-  float onGroundCounter;
+  float wallJumpTimer;
+  int8_t lastWallJumpDirection;
 
-  bool bOnLeftWall;
-  bool bOnRightWall;
-  float onWallCounter;
+  bool bOnGround;
+  float onGroundTimer;
+
+  bool bTouchingWall;
+  bool bTouchingLedge;
+  bool bLedgeDetected;
+  bool bClimbingLedge;
+  //Pour monter sur les bords
+  Vector2 ledgePosTop;
+  Vector2 ledgePos1;
+  Vector2 ledgePos2;
+
+  float turnTimer;
 
   bool bDying;
+  bool bWallSliding;
+  bool bWallClimbing;
   bool bFalling;
   bool bWalking;
   bool bMovingUpDown;
@@ -76,6 +98,8 @@ typedef struct TPlayer
   bool bSplashOut;
   bool bUnderWater;
 
+  int  wantedHorizontalDirection;
+  int  wantedVerticalDirection;
   bool bWantWalk;
   bool bWantJump;
   bool bWantDoubleJump;
