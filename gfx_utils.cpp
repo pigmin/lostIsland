@@ -42,6 +42,88 @@ void PixelGameEngine::DrawSprite(int32_t x, int32_t y, Sprite* sprite, uint32_t 
 	}
   */
 
+void drawSpriteSheet(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, uint16_t frame, int8_t DIR, int light)
+{
+  uint16_t idx = 0;
+
+  idx = frame * width * height * 2;
+  
+  if (light < 0)
+  {
+
+    if (DIR > 0)
+    {
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint16_t value = (bitmap[idx++]) | (bitmap[idx++] << 8);
+          //   Serial.printf("%d,", value);
+          if (value != 0xF81F)
+          {
+            canvas->drawPixel(xMove + i, yMove, value);
+          }
+        }
+        //    Serial.println("");
+      }
+    }
+    else
+    {
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint16_t value = (bitmap[idx++]) | (bitmap[idx++] << 8);
+          //        Serial.printf("%0,", value);
+          if (value != 0xF81F)
+          {
+            canvas->drawPixel((xMove + width - 1) - i, yMove, value);
+          }
+        }
+        //    Serial.println("");
+      }
+    }
+  }
+  else
+  {
+    if (DIR > 0)
+    {
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint16_t value = (bitmap[idx++]) | (bitmap[idx++] << 8);
+          //   Serial.printf("%d,", value);
+          if (value != 0xF81F)
+          {
+            canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
+          }
+        }
+        //    Serial.println("");
+      }
+    }
+    else
+    {
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint16_t value = (bitmap[idx++]) | (bitmap[idx++] << 8);
+          //        Serial.printf("%0,", value);
+          if (value != 0xF81F)
+          {
+            canvas->drawPixel((xMove + width - 1) - i, yMove, lightBlendRGB565(value, light));
+          }
+        }
+        //    Serial.println("");
+      }
+    }
+  }
+
+  //  Serial.println("");
+}
+
+
 void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int8_t DIR, int light)
 {
   uint16_t idx = 0;

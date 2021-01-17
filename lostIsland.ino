@@ -41,7 +41,7 @@ static const uint32_t PROGMEM pmf_aceman[] =
 #endif
 
 
-    const float ledgeClimbXOffset1 = 0.0f;
+    const float ledgeClimbXOffset1 = -2.0f;
     const float ledgeClimbYOffset1 = 0.0f;
     const float ledgeClimbXOffset2 = 0.0f;
     const float ledgeClimbYOffset2 = 0.0f;
@@ -380,6 +380,7 @@ void initPlayer()
     Player.jumpTimer = 0;
     Player.wallJumpTimer = 0;
     Player.bDoubleJumping = false;
+    Player.bWallJumping = false;
     Player.bWallSliding = false;
     Player.bWallClimbing = false;
     Player.bFalling = false;
@@ -449,6 +450,28 @@ void set_idle()
     }
 }
 
+void set_double_jumping()
+{
+    if (Player.stateAnim != PLAYER_STATE_DOUBLE_JUMP)
+    {
+        Player.stateAnim = PLAYER_STATE_DOUBLE_JUMP;
+
+        Player.anim_frame = PLAYER_FRAME_SALTO_1;
+        Player.current_framerate = 0;
+    }
+}
+
+void set_wall_jumping()
+{
+    if (Player.stateAnim != PLAYER_STATE_WALL_JUMP)
+    {
+        Player.stateAnim = PLAYER_STATE_WALL_JUMP;
+
+        Player.anim_frame = PLAYER_FRAME_WALL_JUMP_1;
+        Player.current_framerate = 0;
+    }
+}
+
 void set_jumping()
 {
     if (Player.stateAnim != PLAYER_STATE_JUMP)
@@ -484,11 +507,11 @@ void set_wall_climbing()
 
 void set_walking()
 {
-    if (Player.stateAnim != PLAYER_STATE_WALK)
+    if (Player.stateAnim != PLAYER_STATE_RUN)
     {
-        Player.stateAnim = PLAYER_STATE_WALK;
+        Player.stateAnim = PLAYER_STATE_RUN;
 
-        Player.anim_frame = PLAYER_FRAME_WALK_1;
+        Player.anim_frame = PLAYER_FRAME_RUN_1;
         Player.current_framerate = 0;
     }
 }
@@ -1112,15 +1135,17 @@ void drawPlayer()
     case PLAYER_STATE_WALL_SLIDING:
         anim_player_wall_sliding();
         break;
-    case PLAYER_STATE_WALK:
+    case PLAYER_STATE_RUN:
         anim_player_walk();
         break;
     case PLAYER_STATE_LEDGE_CLIMB:
         anim_player_ledge_climbing();
         break;
     case PLAYER_STATE_JUMP:
-    case PLAYER_STATE_DOUBLE_JUMP:
         anim_player_jump();
+        break;
+    case PLAYER_STATE_DOUBLE_JUMP:
+        anim_player_double_jump();
         break;
     case PLAYER_STATE_FALL:
         anim_player_falling();
@@ -1678,20 +1703,7 @@ void drawTiles()
                     else if (value == BLOCK_REDSTONE) //
                     {
                         drawTile(px, py, rock_redstone.pixel_data, curLight, contour);
-                    }
-                    /*                    else if (value == 0x60) //
-                    {
-                        drawSprite(px, py, grass_left_8x8.width, grass_left_8x8.height, grass_left_8x8.pixel_data, 1, curLight);
-                    }
-                    else if (value == 0x61) //
-                    {
-                        drawSprite(px, py, grass_middle_8x8.width, grass_middle_8x8.height, grass_middle_8x8.pixel_data, 1, curLight);
-                    }
-                    else if (value == 0x62) //
-                    {
-                        drawSprite(px, py, grass_right_8x8.width, grass_right_8x8.height, grass_right_8x8.pixel_data, 1, curLight);
-                    }
-                    */
+                    }                    
                     else
                     {
                         drawTile(px, py, rock_empty.pixel_data, curLight, contour);
@@ -2444,15 +2456,19 @@ void checkPlayerState()
             Player.bFalling = false;
             Player.bJumping = false;
             Player.bDoubleJumping = false;
-            Player.bWallSliding = true;
+            Player.bWallJumping = false;
             Player.bWallClimbing = false;
+
+            Player.bWallSliding = true;
         }
         else if (Player.pos.speedY < 0 && Player.wantedVerticalDirection == DIRECTION_UP && !Player.bJumping)
         {
             Player.bFalling = false;
             Player.bJumping = false;
             Player.bDoubleJumping = false;
+            Player.bWallJumping = false;
             Player.bWallSliding = false;
+
             Player.bWallClimbing = true;
         }
     
@@ -2482,6 +2498,7 @@ void CheckLedgeClimb()
         Player.bFalling = false;
         Player.bJumping = false;
         Player.bDoubleJumping = false;
+        Player.bWallJumping = false;
         Player.bWallSliding = false;
         Player.bWallClimbing = false;
 
@@ -2687,9 +2704,14 @@ void computePlayerAnimations()
         {
             set_sliding();
         }
-        else if (Player.bJumping || Player.bDoubleJumping)
+        else if (Player.bJumping)
         {
-            set_jumping();
+            if (Player.bWallJumping)
+                set_wall_jumping();
+            else if (Player.bDoubleJumping)
+                set_double_jumping();
+            else
+                set_jumping();
         }
         else if (Player.bFalling)
         {
@@ -3522,6 +3544,7 @@ void checkPlayerInputs()
                 Player.jumpTimer = 0;
                 Player.bWallSliding = false;
                 Player.bWallClimbing = false;
+                Player.bWallJumping = false;
                 Player.turnTimer = 0;
                 Player.bCanMove = true;
                 Player.bCanFlip = true;
@@ -3550,6 +3573,8 @@ void checkPlayerInputs()
                 Player.bCanMove = true;
                 Player.bCanFlip = true;
                 Player.bHasWallJumped = true;
+                Player.bWallJumping = true;
+
                 Player.wallJumpTimer = TIME_WALL_LATENCY;
                 if (Player.wantedHorizontalDirection != Player.pos.direction)
                 {
@@ -3577,6 +3602,8 @@ void checkPlayerInputs()
             }
             else if (Player.onGroundTimer > 0) // && Player.pos.speedY == 0)
             {
+                Player.bWallJumping = false;
+                Player.bDoubleJumping = false;
                 Player.onGroundTimer = 0;
                 A_just_pressedTimer = 0;
                 Player.bWantJump = true;
@@ -3597,6 +3624,7 @@ void checkPlayerInputs()
                 //Thrust
                 Player.pos.speedY = -DOUBLE_JUMP_FORCE;
                 Player.bDoubleJumping = true;
+                Player.bWallJumping = false;
                 //Spawn Effect
                 set_double_jump_fx(true);
             }
@@ -4115,23 +4143,12 @@ void anim_player_idle()
     }
     Player.current_framerate++;
 
-    if (Player.anim_frame > PLAYER_FRAME_IDLE_3)
+    if (Player.anim_frame > PLAYER_FRAME_IDLE_4)
     {
         Player.anim_frame = PLAYER_FRAME_IDLE_1;
     }
 
-    switch (Player.anim_frame)
-    {
-    case PLAYER_FRAME_IDLE_1:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_idle1.width, player_idle1.height, player_idle1.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_IDLE_2:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_idle2.width, player_idle2.height, player_idle2.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_IDLE_3:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_idle3.width, player_idle3.height, player_idle3.pixel_data, Player.pos.direction);
-        break;
-    }
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_digging()
@@ -4143,27 +4160,12 @@ void anim_player_digging()
     }
     Player.current_framerate++;
 
-    if (Player.anim_frame > PLAYER_FRAME_ACTION_4)
+    if (Player.anim_frame > PLAYER_FRAME_ACTION_3)
     {
         Player.anim_frame = PLAYER_FRAME_ACTION_1;
     }
 
-    switch (Player.anim_frame)
-    {
-    case PLAYER_FRAME_ACTION_1:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action1.width, player_action1.height, player_action1.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_ACTION_2:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action2.width, player_action2.height, player_action2.pixel_data, Player.pos.direction);
-
-        break;
-    case PLAYER_FRAME_ACTION_3:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action3.width, player_action3.height, player_action3.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_ACTION_4:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_action4.width, player_action4.height, player_action4.pixel_data, Player.pos.direction);
-        break;
-    }
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_wall_climbin()
@@ -4175,17 +4177,12 @@ void anim_player_wall_climbin()
     }
     Player.current_framerate++;
 
-    if (Player.anim_frame > PLAYER_FRAME_WALL_CLIMBING_1)
+    if (Player.anim_frame > PLAYER_FRAME_WALL_CLIMBING_4)
     {
-        Player.anim_frame = PLAYER_FRAME_WALL_CLIMBING_1; //On reste sur 1
+        Player.anim_frame = PLAYER_FRAME_WALL_CLIMBING_1; 
     }
 
-    switch (Player.anim_frame)
-    {
-    case PLAYER_FRAME_WALL_CLIMBING_1:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_wall_sliding.width, player_wall_sliding.height, player_wall_sliding.pixel_data, Player.pos.direction);
-        break;
-    }
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_wall_sliding()
@@ -4197,55 +4194,29 @@ void anim_player_wall_sliding()
     }
     Player.current_framerate++;
 
-    if (Player.anim_frame > PLAYER_FRAME_SLIDING_1)
+    if (Player.anim_frame > PLAYER_FRAME_SLIDING_2)
     {
         Player.anim_frame = PLAYER_FRAME_SLIDING_1; //On reste sur 1
     }
 
-    switch (Player.anim_frame)
-    {
-    case PLAYER_FRAME_SLIDING_1:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_wall_sliding.width, player_wall_sliding.height, player_wall_sliding.pixel_data, Player.pos.direction);
-        break;
-    }
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_walk()
 {
-    if (Player.current_framerate == PLAYER_FRAMERATE_WALK)
+    if (Player.current_framerate == PLAYER_FRAMERATE_RUN)
     {
         Player.anim_frame++;
         Player.current_framerate = 0;
     }
     Player.current_framerate++;
 
-    if (Player.anim_frame > PLAYER_FRAME_WALK_6)
+    if (Player.anim_frame > PLAYER_FRAME_RUN_6)
     {
-        Player.anim_frame = PLAYER_FRAME_WALK_1;
+        Player.anim_frame = PLAYER_FRAME_RUN_1;
     }
 
-    switch (Player.anim_frame)
-    {
-    case PLAYER_FRAME_WALK_1:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk1.width, player_walk1.height, player_walk1.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_WALK_2:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk2.width, player_walk2.height, player_walk2.pixel_data, Player.pos.direction);
-
-        break;
-    case PLAYER_FRAME_WALK_3:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk3.width, player_walk3.height, player_walk3.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_WALK_4:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk4.width, player_walk4.height, player_walk4.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_WALK_5:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk5.width, player_walk5.height, player_walk5.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_WALK_6:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_walk6.width, player_walk6.height, player_walk6.pixel_data, Player.pos.direction);
-        break;
-    }
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_ledge_climbing()
@@ -4254,36 +4225,42 @@ void anim_player_ledge_climbing()
     {
         Player.anim_frame++;
         Player.current_framerate = 0;
+        //cas special, a partir de la frame 5 on monte de 3 , il reste 5 frames, soit 15 pix.
+        // le player est force a ledgePos1 dans checkLedge
+        if (Player.anim_frame >= PLAYER_FRAME_LEDGE_CLIMB_5)
+        {
+            Player.ledgePos1.y -=2;
+            Player.ledgePos1.x +=0.5 * Player.pos.direction;
+        }
     }
     Player.current_framerate++;
 
-    if (Player.anim_frame > PLAYER_FRAME_LEDGE_CLIMB_5)
+    if (Player.anim_frame > PLAYER_FRAME_LEDGE_CLIMB_9)
     {
         //On annule tout
         FinishLedgeClimb();
         return;
     }
 
-    switch (Player.anim_frame)
-    {
-    case PLAYER_FRAME_LEDGE_CLIMB_1:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump1.width, player_jump1.height, player_jump1.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_LEDGE_CLIMB_2:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump2.width, player_jump2.height, player_jump2.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_LEDGE_CLIMB_3:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump3.width, player_jump3.height, player_jump3.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_LEDGE_CLIMB_4:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump4.width, player_jump4.height, player_jump4.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_LEDGE_CLIMB_5:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump5.width, player_jump5.height, player_jump5.pixel_data, Player.pos.direction);
-        break;
-    }
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
 }
 
+void anim_player_double_jump()
+{
+    if (Player.current_framerate == PLAYER_FRAMERATE_DOUBLE_JUMP)
+    {
+        Player.anim_frame++;
+        Player.current_framerate = 0;
+    }
+    Player.current_framerate++;
+
+    if (Player.anim_frame > PLAYER_FRAME_SALTO_4)
+    {
+        Player.anim_frame = PLAYER_FRAME_SALTO_1; //On reste sur 5
+    }
+
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+}
 
 void anim_player_jump()
 {
@@ -4294,29 +4271,12 @@ void anim_player_jump()
     }
     Player.current_framerate++;
 
-    if (Player.anim_frame > PLAYER_FRAME_JUMP_5)
+    if (Player.anim_frame > PLAYER_FRAME_JUMP_4)
     {
-        Player.anim_frame = PLAYER_FRAME_JUMP_5; //On reste sur 5
+        Player.anim_frame = PLAYER_FRAME_JUMP_4; //On reste sur 5
     }
 
-    switch (Player.anim_frame)
-    {
-    case PLAYER_FRAME_JUMP_1:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump1.width, player_jump1.height, player_jump1.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_JUMP_2:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump2.width, player_jump2.height, player_jump2.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_JUMP_3:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump3.width, player_jump3.height, player_jump3.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_JUMP_4:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump4.width, player_jump4.height, player_jump4.pixel_data, Player.pos.direction);
-        break;
-    case PLAYER_FRAME_JUMP_5:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_jump5.width, player_jump5.height, player_jump5.pixel_data, Player.pos.direction);
-        break;
-    }
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_falling()
@@ -4329,17 +4289,12 @@ void anim_player_falling()
     }
     Player.current_framerate++;
 
-    if (Player.anim_frame > PLAYER_FRAME_FALLING_1)
+    if (Player.anim_frame > PLAYER_FRAME_FALLING_2)
     {
-        Player.anim_frame = PLAYER_FRAME_FALLING_1; //On reste sur 1
+        Player.anim_frame = PLAYER_FRAME_FALLING_1;
     }
 
-    switch (Player.anim_frame)
-    {
-    case PLAYER_FRAME_FALLING_1:
-        drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_falling1.width, player_falling1.height, player_falling1.pixel_data, Player.pos.direction);
-        break;
-    }
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_mining()
@@ -4364,7 +4319,7 @@ void anim_player_dying()
   switch (Player.anim_frame)
   {
   case PLAYER_FRAME_DIE_1:
-    //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player_die_bits, Player.pos.direction);
+    //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, player_height, player_die_bits, Player.pos.direction);
     drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_die.width, player_die.height, player_die.pixel_data, Player.pos.direction);
     break;
   }*/
@@ -4390,16 +4345,16 @@ void anim_player_wining()
   switch (Player.anim_frame)
   {
   case PLAYER_FRAME_WIN_1:
-    //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player4, Player.pos.direction);
+    //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, player_height, player4, Player.pos.direction);
       drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_idle1.width, player_idle1.height, player_idle1.pixel_data, Player.pos.direction);
     break;
   case PLAYER_FRAME_WIN_2:
-    //drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player2, Player.pos.direction);
+    //drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, player_height, player2, Player.pos.direction);
       drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_run1.width, player_run1.height, player_run1.pixel_data, Player.pos.direction);
 
     break;
   case PLAYER_FRAME_WIN_3:
-    //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_width, player_height, player3, Player.pos.direction);
+    //    drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, player_height, player3, Player.pos.direction);
       drawSprite(Player.pos.pX - cameraX, Player.pos.pY - cameraY, player_run2.width, player_run2.height, player_run2.pixel_data, Player.pos.direction);
     break;
   }*/

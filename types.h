@@ -6,7 +6,7 @@
 #define MAX_BACKPACK_ITEMS 32
 
 //Bande morte sur l'axe X (ignorée par les tests de collision)
-#define PLAYER_X_BDM  4
+#define PLAYER_X_BDM  3
 //Idem axe Y mais seulement en haut (les pieds sont sur le sol)
 #define PLAYER_Y_BDM  4
 
@@ -65,6 +65,7 @@ typedef struct TPlayer
   bool bJumping;
   float jumpTimer;
   bool bDoubleJumping;
+  bool bWallJumping;
 
   float wallJumpTimer;
   int8_t lastWallJumpDirection;

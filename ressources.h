@@ -1,29 +1,5 @@
 
-#include "res/player_idle1.c"
-#include "res/player_idle2.c"
-#include "res/player_idle3.c"
-
-#include "res/player_walk1.c"
-#include "res/player_walk2.c"
-#include "res/player_walk3.c"
-#include "res/player_walk4.c"
-#include "res/player_walk5.c"
-#include "res/player_walk6.c"
-
-#include "res/player_action1.c"
-#include "res/player_action2.c"
-#include "res/player_action3.c"
-#include "res/player_action4.c"
-
-#include "res/player_falling1.c"
-
-#include "res/player_jump1.c"
-#include "res/player_jump2.c"
-#include "res/player_jump3.c"
-#include "res/player_jump4.c"
-#include "res/player_jump5.c"
-
-#include "res/player_wall_sliding.c"
+#include "res2/player_sheet_v2.c"
 
 #include "res/fx_jump1.c"
 #include "res/fx_jump2.c"
