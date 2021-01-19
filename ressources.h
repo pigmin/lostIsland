@@ -20,9 +20,7 @@
 #include "res/zombi_walk2.c"
 #include "res/zombi_walk3.c"
 
-#include "res/skel_walk1.c"
-#include "res/skel_walk2.c"
-#include "res/skel_walk3.c"
+#include "res2/skeleton_sheet.c"
 
 //Tiles
 #include "res/back_ground.c"    //AIR_UNDERGROUND

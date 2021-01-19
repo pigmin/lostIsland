@@ -43,7 +43,7 @@ static const uint32_t PROGMEM pmf_aceman[] =
 
     const float ledgeClimbXOffset1 = -2.0f;
     const float ledgeClimbYOffset1 = 0.0f;
-    const float ledgeClimbXOffset2 = 0.0f;
+    const float ledgeClimbXOffset2 = -5.0f;
     const float ledgeClimbYOffset2 = 0.0f;
 
 void PlayMOD(const void *pmf_file)
@@ -1003,8 +1003,9 @@ void initWorld()
         ENNEMIES[NB_WORLD_ENNEMIES].type = SKEL_ENNEMY;
         ENNEMIES[NB_WORLD_ENNEMIES].speedX = SKEL_WALKING_SPEED;
         ENNEMIES[NB_WORLD_ENNEMIES].speedY = 0;
-        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 4;
-        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 3;
+        ENNEMIES[NB_WORLD_ENNEMIES].anim_frame = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 5;
+        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = SKEL_WALK_FRAMES;
 
         ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
         ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
@@ -1045,8 +1046,9 @@ void initWorld()
         ENNEMIES[NB_WORLD_ENNEMIES].type = ZOMBI_ENNEMY;
         ENNEMIES[NB_WORLD_ENNEMIES].speedX = ZOMBI_WALKING_SPEED;
         ENNEMIES[NB_WORLD_ENNEMIES].speedY = 0;
-        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 4;
-        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 3;
+        ENNEMIES[NB_WORLD_ENNEMIES].anim_frame = 0;
+        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 5;
+        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = ZOMBI_WALK_FRAMES;
 
         ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
         ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
@@ -1084,8 +1086,9 @@ void initWorld()
                         ENNEMIES[NB_WORLD_ENNEMIES].type = SPIDER_ENNEMY;
                         ENNEMIES[NB_WORLD_ENNEMIES].speedX = SPIDER_WALKING_SPEED;
                         ENNEMIES[NB_WORLD_ENNEMIES].speedY = 0;
-                        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 2;
-                        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = 2;
+                        ENNEMIES[NB_WORLD_ENNEMIES].anim_frame = 0;
+                        ENNEMIES[NB_WORLD_ENNEMIES].max_frames = 5;
+                        ENNEMIES[NB_WORLD_ENNEMIES].nb_anim_frames = SPIDER_WALK_FRAMES;
 
                         ENNEMIES[NB_WORLD_ENNEMIES].bFalling = false;
                         ENNEMIES[NB_WORLD_ENNEMIES].bJumping = false;
@@ -1141,11 +1144,11 @@ void drawPlayer()
     case PLAYER_STATE_LEDGE_CLIMB:
         anim_player_ledge_climbing();
         break;
-    case PLAYER_STATE_JUMP:
-        anim_player_jump();
-        break;
     case PLAYER_STATE_DOUBLE_JUMP:
         anim_player_double_jump();
+        break;
+    case PLAYER_STATE_JUMP:
+        anim_player_jump();
         break;
     case PLAYER_STATE_FALL:
         anim_player_falling();
@@ -1261,9 +1264,9 @@ void drawItem(Titem *currentItem)
     }
     currentItem->current_framerate++;
 
-    if (currentItem->anim_frame > currentItem->nb_anim_frames)
+    if (currentItem->anim_frame >= currentItem->nb_anim_frames)
     {
-        currentItem->anim_frame = 1;
+        currentItem->anim_frame = 0;
     }
     if (currentItem->bIsAlive < 127)
     {
@@ -1371,14 +1374,14 @@ void drawEnnemy(Tennemy *currentEnnemy)
     }
     currentEnnemy->current_framerate++;
 
-    if (currentEnnemy->anim_frame > currentEnnemy->nb_anim_frames)
+    if (currentEnnemy->anim_frame >= currentEnnemy->nb_anim_frames)
     {
-        currentEnnemy->anim_frame = 1;
+        currentEnnemy->anim_frame = 0;
     }
     if (currentEnnemy->bIsAlive < 127)
     {
         //On fixe a la frames + 1 (dans le case du drraw on dessinera la frame "dying" )
-        currentEnnemy->anim_frame = currentEnnemy->nb_anim_frames + 1;
+       // currentEnnemy->anim_frame = currentEnnemy->nb_anim_frames + 1;
         currentEnnemy->bIsAlive -= 4;
     }
 
@@ -1390,53 +1393,42 @@ void drawEnnemy(Tennemy *currentEnnemy)
     {
         switch (currentEnnemy->type)
         {
-        case SPIDER_ENNEMY:
-        {
-            switch (currentEnnemy->anim_frame)
+            case SPIDER_ENNEMY:
             {
-            case 1:
-                drawSprite(px, py, spider_walk1.width, spider_walk1.height, spider_walk1.pixel_data, 1);
-                break;
-            case 2:
-                drawSprite(px, py, spider_walk2.width, spider_walk2.height, spider_walk2.pixel_data, 1);
+                switch (currentEnnemy->anim_frame)
+                {
+                case 1:
+                    drawSprite(px, py, spider_walk1.width, spider_walk1.height, spider_walk1.pixel_data, 1);
+                    break;
+                case 2:
+                    drawSprite(px, py, SPIDER_WIDTH, SPIDER_HEIGHT, spider_walk2.pixel_data, 1);
+                    break;
+                }
                 break;
             }
-            break;
-        }
-        case ZOMBI_ENNEMY:
-        {
-            int DIR = currentEnnemy->speedX > 0 ? 1 : -1;
-            switch (currentEnnemy->anim_frame)
+            case ZOMBI_ENNEMY:
             {
-            case 1:
-                drawSprite(px, py, zombi_walk1.width, zombi_walk1.height, zombi_walk1.pixel_data, DIR);
-                break;
-            case 2:
-                drawSprite(px, py, zombi_walk2.width, zombi_walk2.height, zombi_walk2.pixel_data, DIR);
-                break;
-            case 3:
-                drawSprite(px, py, zombi_walk3.width, zombi_walk3.height, zombi_walk3.pixel_data, DIR);
+                int DIR = currentEnnemy->speedX > 0 ? 1 : -1;
+                switch (currentEnnemy->anim_frame)
+                {
+                case 1:
+                    drawSprite(px, py, zombi_walk1.width, zombi_walk1.height, zombi_walk1.pixel_data, DIR);
+                    break;
+                case 2:
+                    drawSprite(px, py, zombi_walk2.width, zombi_walk2.height, zombi_walk2.pixel_data, DIR);
+                    break;
+                case 3:
+                    drawSprite(px, py, ZOMBI_WIDTH, ZOMBI_HEIGHT, zombi_walk3.pixel_data, DIR);
+                    break;
+                }
                 break;
             }
-            break;
-        }
-        case SKEL_ENNEMY:
-        {
-            int DIR = currentEnnemy->speedX > 0 ? 1 : -1;
-            switch (currentEnnemy->anim_frame)
+            case SKEL_ENNEMY:
             {
-            case 1:
-                drawSprite(px, py, skel_walk1.width, skel_walk1.height, skel_walk1.pixel_data, DIR);
-                break;
-            case 2:
-                drawSprite(px, py, skel_walk2.width, skel_walk2.height, skel_walk2.pixel_data, DIR);
-                break;
-            case 3:
-                drawSprite(px, py, skel_walk3.width, skel_walk3.height, skel_walk3.pixel_data, DIR);
+                int DIR = currentEnnemy->speedX > 0 ? 1 : -1;
+                drawSpriteSheet(px, py, SKEL_WIDTH, SKEL_HEIGHT, skeleton_sheet.pixel_data, currentEnnemy->anim_frame, DIR);
                 break;
             }
-            break;
-        }
         }
         if (currentEnnemy->bIsAlive >= 127)
         {
@@ -2421,6 +2413,10 @@ void checkPlayerState()
     else
         Player.bOnGround = false;
 
+    //On suppose qu'on ne saute plus
+    if (Player.pos.speedY >= 0)
+        Player.bJumping = false;
+
     //Ground
     if (Player.onGroundTimer > 0)
         Player.onGroundTimer -= fElapsedTime;
@@ -2693,30 +2689,22 @@ void computePlayerAnimations()
     else
     {
         if (Player.bClimbingLedge)
-        {
             set_ledgeclimbing();
-        }
         else if (Player.bWallClimbing)
-        {
             set_wall_climbing();
-        }
         else if (Player.bWallSliding)
-        {
             set_sliding();
-        }
+        else if (Player.bWallJumping)
+            set_wall_jumping();
         else if (Player.bJumping)
         {
-            if (Player.bWallJumping)
-                set_wall_jumping();
-            else if (Player.bDoubleJumping)
+            if (Player.bDoubleJumping)
                 set_double_jumping();
             else
                 set_jumping();
         }
         else if (Player.bFalling)
-        {
             set_falling();
-        }
         else
         {
             //    if (Player.bOnGround)
@@ -3260,7 +3248,6 @@ void checkPlayerCollisionsWorld()
     }
     
     //Y
-    Player.bJumping = false;
     Player.bFalling = false;
     Player.bOnGround = false;
     Player.bLanding = false;
@@ -3276,11 +3263,6 @@ void checkPlayerCollisionsWorld()
         {
             Player.pos.newY = (Player.pos.newY - fmod(Player.pos.newY, 16)) + (16 - PLAYER_Y_BDM); // - PLAYER_Y_BDM ??
             Player.pos.speedY = 0;
-        }
-        else
-        {
-            if (Player.bWantJump || Player.bWantDoubleJump)
-                Player.bJumping = true;
         }
     }
     else if (Player.pos.speedY > 0)
@@ -3542,6 +3524,7 @@ void checkPlayerInputs()
                 A_just_pressedTimer = 0;
                 Player.bWantJump = true;
                 Player.jumpTimer = 0;
+
                 Player.bWallSliding = false;
                 Player.bWallClimbing = false;
                 Player.bWallJumping = false;
@@ -3566,6 +3549,7 @@ void checkPlayerInputs()
                 //WALLJUMP
                 A_just_pressedTimer = 0;
                 Player.bWantJump = true;
+
                 Player.jumpTimer = 0;
                 Player.bWallSliding = false;
                 Player.bWallClimbing = false;
@@ -3602,6 +3586,7 @@ void checkPlayerInputs()
             }
             else if (Player.onGroundTimer > 0) // && Player.pos.speedY == 0)
             {
+                Player.bJumping = true;
                 Player.bWallJumping = false;
                 Player.bDoubleJumping = false;
                 Player.onGroundTimer = 0;
@@ -3623,6 +3608,7 @@ void checkPlayerInputs()
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Thrust
                 Player.pos.speedY = -DOUBLE_JUMP_FORCE;
+                Player.bJumping = true;
                 Player.bDoubleJumping = true;
                 Player.bWallJumping = false;
                 //Spawn Effect
@@ -4230,7 +4216,7 @@ void anim_player_ledge_climbing()
         if (Player.anim_frame >= PLAYER_FRAME_LEDGE_CLIMB_5)
         {
             Player.ledgePos1.y -=2;
-            Player.ledgePos1.x +=0.5 * Player.pos.direction;
+            Player.ledgePos1.x += 1 * Player.pos.direction;
         }
     }
     Player.current_framerate++;
@@ -4256,7 +4242,7 @@ void anim_player_double_jump()
 
     if (Player.anim_frame > PLAYER_FRAME_SALTO_4)
     {
-        Player.anim_frame = PLAYER_FRAME_SALTO_1; //On reste sur 5
+        Player.anim_frame = PLAYER_FRAME_SALTO_1; 
     }
 
     drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
