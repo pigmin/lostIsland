@@ -1,11 +1,7 @@
 
-#include "res2/player_sheet_v2.c"
+#include "res2/player_sheet_v3.c"
 
-#include "res/fx_jump1.c"
-#include "res/fx_jump2.c"
-#include "res/fx_jump3.c"
-#include "res/fx_jump4.c"
-#include "res/fx_jump5.c"
+#include "res2/jump_dust_vertical.c"
 
 #include "res/fx_splash1.c"
 #include "res/fx_splash2.c"

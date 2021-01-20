@@ -1,10 +1,11 @@
 #ifndef SPRITES_H
 #define SPRITES_H
 
-   #define PLAYER_X_OFFSET -2
-   #define PLAYER_Y_OFFSET -2
-   #define PLAYER_WIDTH 21
-   #define PLAYER_HEIGHT 18
+   #define PLAYER_X_OFFSET -3
+   #define PLAYER_Y_OFFSET -4
+   #define PLAYER_WIDTH 23
+   #define PLAYER_HEIGHT 19
+
 
    #define PLAYER_STATE_IDLE              0
    #define PLAYER_STATE_RUN               1
@@ -98,25 +99,25 @@
    #define PLAYER_FRAME_GROW_1   0
    #define PLAYER_FRAME_GROW_2   1
 
-   const int PLAYER_FRAMERATE_IDLE = 5;
-   const int PLAYER_FRAMERATE_FALLING = 5;
-   const int PLAYER_FRAMERATE_RUN = 5;
-   const int PLAYER_FRAMERATE_JUMP = 5;
-   const int PLAYER_FRAMERATE_ACTION = 5;
-   const int PLAYER_FRAMERATE_DIE = 5;
-   const int PLAYER_FRAMERATE_TOUCH = 5;
-   const int PLAYER_FRAMERATE_GROW = 5;
-   const int PLAYER_FRAMERATE_WIN = 5;
-   const int PLAYER_FRAMERATE_SLIDING = 5;
-   const int PLAYER_FRAMERATE_LEDGE_CLIMBING = 3;
-   const int PLAYER_FRAMERATE_WALL_CLIMBING = 5;
-   const int PLAYER_FRAMERATE_DOUBLE_JUMP = 5;
-   const int PLAYER_FRAMERATE_WALL_JUMP = 5;
+   #define PLAYER_FRAMERATE_IDLE             5
+   #define PLAYER_FRAMERATE_FALLING          2
+   #define PLAYER_FRAMERATE_RUN              2
+   #define PLAYER_FRAMERATE_JUMP             2
+   #define PLAYER_FRAMERATE_ACTION           5
+   #define PLAYER_FRAMERATE_DIE              5
+   #define PLAYER_FRAMERATE_TOUCH            5
+   #define PLAYER_FRAMERATE_GROW             5  
+   #define PLAYER_FRAMERATE_WIN              5  
+   #define PLAYER_FRAMERATE_SLIDING          2
+   #define PLAYER_FRAMERATE_LEDGE_CLIMBING   3
+   #define PLAYER_FRAMERATE_WALL_CLIMBING    5
+   #define PLAYER_FRAMERATE_DOUBLE_JUMP      2
+   #define PLAYER_FRAMERATE_WALL_JUMP        2
 
-   const int PLAYER_DIE_FRAMES = FPS*3; 
-   const int PLAYER_WIN_FRAMES = FPS*8; 
-   const int PLAYER_GROW_FRAMES = FPS*2; 
-   const int PLAYER_TOUCH_FRAMES = FPS*2; 
+   #define PLAYER_DIE_FRAMES  (FPS*3) 
+   #define PLAYER_WIN_FRAMES  (FPS*8) 
+   #define PLAYER_GROW_FRAMES  (FPS*2) 
+   #define PLAYER_TOUCH_FRAMES  (FPS*2) 
 
 
 #define  FX_NONE           0
@@ -129,15 +130,21 @@
 #define FX_FRAME_DOUBLE_JUMP_3  2
 #define FX_FRAME_DOUBLE_JUMP_4  3
 #define FX_FRAME_DOUBLE_JUMP_5  4
-const int FX_FRAMERATE_DOUBLE_JUMP = 2;
+#define FX_FRAMERATE_DOUBLE_JUMP             2
 
+
+
+#define JUMP_DUST_VERTICAL_WIDTH    16
+#define JUMP_DUST_VERTICAL_HEIGHT   5
+#define JUMP_DUST_HORIZONTAL_WIDTH   5
+#define JUMP_DUST_HORIZONTAL_HEIGHT   16
 
 #define FX_FRAME_DUST_1  0
 #define FX_FRAME_DUST_2  1
 #define FX_FRAME_DUST_3  2
 #define FX_FRAME_DUST_4  3
 #define FX_FRAME_DUST_5  4
-const int FX_FRAMERATE_DUST = 1;
+#define FX_FRAMERATE_DUST                    1
 
 
 #define FX_FRAME_SPLASH_1  0
@@ -145,7 +152,7 @@ const int FX_FRAMERATE_DUST = 1;
 #define FX_FRAME_SPLASH_3  2
 #define FX_FRAME_SPLASH_4  3
 #define FX_FRAME_SPLASH_5  4
-const int FX_FRAMERATE_SPLASH = 1;
+#define FX_FRAMERATE_SPLASH                  1
 
 
 #endif

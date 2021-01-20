@@ -22,10 +22,10 @@ void WATER_Update()
 void WATER_UpdateFluidCell2(int x, int y)
 {
     // get surrounding 3 cells and input into action matrix
-    TworldTile *cell;
-    TworldTile *bottomCell;
-    TworldTile *leftCell;
-    TworldTile *rightCell;
+    TworldTile *cell = NULL;
+    TworldTile *bottomCell = NULL;
+    TworldTile *leftCell = NULL;
+    TworldTile *rightCell = NULL;
     uint8_t matrix = Direction_None;
     int leftOverFluid;
 
@@ -120,6 +120,8 @@ void WATER_UpdateFluidCell2(int x, int y)
 
 void FlowRight(TworldTile *cell, TworldTile *rightCell)
 {
+    if (!cell || !rightCell)
+        return;
     int amountToSpread = (rightCell->Level + cell->Level) / 2;
     int remainder = (rightCell->Level + cell->Level) % 2;
 
@@ -134,6 +136,8 @@ void FlowRight(TworldTile *cell, TworldTile *rightCell)
 
 void FlowLeft(TworldTile *cell, TworldTile *leftCell)
 {
+    if (!cell || !leftCell)
+        return;
     int amountToSpread = (leftCell->Level + cell->Level) / 2;
     int remainder = (leftCell->Level + cell->Level) % 2;
 
@@ -148,6 +152,9 @@ void FlowLeft(TworldTile *cell, TworldTile *leftCell)
 
 void FlowLeftRight(TworldTile *cell, TworldTile *leftCell, TworldTile *rightCell)
 {
+    if (!cell || !rightCell || !leftCell)
+        return;
+
     int amountToSpread = (leftCell->Level + rightCell->Level + cell->Level) / 3;
     int remainder = (leftCell->Level + rightCell->Level + cell->Level) % 3;
     // if we have a remainder...
@@ -182,6 +189,9 @@ void FlowLeftRight(TworldTile *cell, TworldTile *leftCell, TworldTile *rightCell
 
 int FlowBottom(TworldTile *cell, TworldTile *bottomCell)
 {
+    if (!cell || !bottomCell)
+        return 0;
+
     // check to see how much fluid can fall down
     int spaceAvailable = MAX_WATER_LEVEL - bottomCell->Level;
     int amountToMove = spaceAvailable;

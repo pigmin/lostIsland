@@ -1147,6 +1147,10 @@ void drawPlayer()
     case PLAYER_STATE_DOUBLE_JUMP:
         anim_player_double_jump();
         break;
+
+    case PLAYER_STATE_WALL_JUMP:
+        anim_player_wall_jumping();
+        break;
     case PLAYER_STATE_JUMP:
         anim_player_jump();
         break;
@@ -2415,7 +2419,11 @@ void checkPlayerState()
 
     //On suppose qu'on ne saute plus
     if (Player.pos.speedY >= 0)
+    {
         Player.bJumping = false;
+        Player.bDoubleJumping = false;
+        Player.bWallJumping = false;
+    }
 
     //Ground
     if (Player.onGroundTimer > 0)
@@ -3544,7 +3552,7 @@ void checkPlayerInputs()
                 //Spawn Effect (wall juump)
                 //set_double_jump_fx();
             }
-            else if (!Player.bOnGround && Player.bTouchingWall && Player.wantedHorizontalDirection != 0) //(Player.onWallCounter > 0) // && Player.pos.speedY == 0)
+            else if (!Player.bOnGround && Player.bTouchingWall && Player.wantedHorizontalDirection != Player.pos.direction) //(Player.onWallCounter > 0) // && Player.pos.speedY == 0)
             {
                 //WALLJUMP
                 A_just_pressedTimer = 0;
@@ -3560,25 +3568,14 @@ void checkPlayerInputs()
                 Player.bWallJumping = true;
 
                 Player.wallJumpTimer = TIME_WALL_LATENCY;
-                if (Player.wantedHorizontalDirection != Player.pos.direction)
-                {
-                    //Wall jump en face
-                    Player.pos.direction = -Player.pos.direction;
-                    Player.lastWallJumpDirection = Player.pos.direction;
 
-                    //Thrust
-                    Player.pos.speedX = Player.lastWallJumpDirection * WALL_JUMP_FORCE_X;
-                    Player.pos.speedY = -WALL_JUMP_FORCE_Y;
-                }
-                else
-                {
-                    //Wall jump vertical
-                    Player.lastWallJumpDirection = Player.pos.direction;
+                //Wall jump en face
+                Player.pos.direction = -Player.pos.direction;
+                Player.lastWallJumpDirection = Player.pos.direction;
 
-                    //Thrust
-                    Player.pos.speedX = 0;
-                    Player.pos.speedY = -WALL_JUMP_CLIMB_FORCE_Y;
-                }
+                //Thrust
+                Player.pos.speedX = Player.lastWallJumpDirection * WALL_JUMP_FORCE_X;
+                Player.pos.speedY = -WALL_JUMP_FORCE_Y;
 
                 sndPlayerCanal1.play(AudioSample__Jump);
                 //Spawn Effect (wall juump)
@@ -4231,6 +4228,23 @@ void anim_player_ledge_climbing()
     drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
 }
 
+void anim_player_wall_jumping()
+{
+    if (Player.current_framerate == PLAYER_FRAMERATE_WALL_JUMP)
+    {
+        Player.anim_frame++;
+        Player.current_framerate = 0;
+    }
+    Player.current_framerate++;
+
+    if (Player.anim_frame > PLAYER_FRAME_WALL_JUMP_2)
+    {
+        Player.anim_frame = PLAYER_FRAME_WALL_JUMP_1; 
+    }
+
+    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+}
+
 void anim_player_double_jump()
 {
     if (Player.current_framerate == PLAYER_FRAMERATE_DOUBLE_JUMP)
@@ -4362,24 +4376,7 @@ void anim_player_fx_dust()
         return;
     }
 
-    switch (Player.FX.anim_frame)
-    {
-    case FX_FRAME_DUST_1:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump1.width, fx_jump1.height, fx_jump1.pixel_data, Player.FX.direction);
-        break;
-    case FX_FRAME_DUST_2:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump2.width, fx_jump2.height, fx_jump2.pixel_data, Player.FX.direction);
-        break;
-    case FX_FRAME_DUST_3:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump3.width, fx_jump3.height, fx_jump3.pixel_data, Player.FX.direction);
-        break;
-    case FX_FRAME_DUST_4:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump4.width, fx_jump4.height, fx_jump4.pixel_data, Player.FX.direction);
-        break;
-    case FX_FRAME_DUST_5:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump5.width, fx_jump5.height, fx_jump5.pixel_data, Player.FX.direction);
-        break;
-    }
+    drawSpriteSheet(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - JUMP_DUST_VERTICAL_HEIGHT), JUMP_DUST_VERTICAL_WIDTH, JUMP_DUST_VERTICAL_HEIGHT, jump_dust_vertical.pixel_data, Player.FX.anim_frame, Player.pos.direction);
 }
 
 void anim_player_fx_splash()
@@ -4465,24 +4462,7 @@ void anim_player_fx_double_jump()
         return;
     }
 
-    switch (Player.FX.anim_frame)
-    {
-    case FX_FRAME_DOUBLE_JUMP_1:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump1.width, fx_jump1.height, fx_jump1.pixel_data, Player.FX.direction);
-        break;
-    case FX_FRAME_DOUBLE_JUMP_2:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump2.width, fx_jump2.height, fx_jump2.pixel_data, Player.FX.direction);
-        break;
-    case FX_FRAME_DOUBLE_JUMP_3:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump3.width, fx_jump3.height, fx_jump3.pixel_data, Player.FX.direction);
-        break;
-    case FX_FRAME_DOUBLE_JUMP_4:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump4.width, fx_jump4.height, fx_jump4.pixel_data, Player.FX.direction);
-        break;
-    case FX_FRAME_DOUBLE_JUMP_5:
-        drawSprite(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - fx_jump1.height), fx_jump5.width, fx_jump5.height, fx_jump5.pixel_data, Player.FX.direction);
-        break;
-    }
+    drawSpriteSheet(Player.FX.pX - cameraX, Player.FX.pY - cameraY + (16 - JUMP_DUST_VERTICAL_HEIGHT), JUMP_DUST_VERTICAL_WIDTH, JUMP_DUST_VERTICAL_HEIGHT, jump_dust_vertical.pixel_data, Player.FX.anim_frame, Player.pos.direction);
 }
 
 void displayGame()

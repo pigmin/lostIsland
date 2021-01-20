@@ -44,7 +44,7 @@ void PixelGameEngine::DrawSprite(int32_t x, int32_t y, Sprite* sprite, uint32_t 
 
 void drawSpriteSheet(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, uint16_t frame, int8_t DIR, int light)
 {
-  uint16_t idx = 0;
+  uint32_t idx = 0;
 
   idx = frame * width * height * 2;
   
