@@ -40,11 +40,15 @@ static const uint32_t PROGMEM pmf_aceman[] =
     }
 #endif
 
+bool bCaptureEcran = false;
+uint8_t numCapture = 0;
 
-    const float ledgeClimbXOffset1 = -2.0f;
-    const float ledgeClimbYOffset1 = 0.0f;
-    const float ledgeClimbXOffset2 = -5.0f;
-    const float ledgeClimbYOffset2 = 0.0f;
+void changeState(TGameStates newState)
+{
+    gameState = newState;
+    fElapsedTime = 0.0f;
+    lastTime = millis();
+}
 
 void PlayMOD(const void *pmf_file)
 {
@@ -296,7 +300,7 @@ void setup()
         Serial.println("Error, failed to initialize filesysBeginMSD!");
         arcada.haltBox("Failed to begin filesysBeginMSD");
     }
-*/
+    */
     Arcada_FilesystemType foundFS = arcada.filesysBegin();
     if (foundFS == ARCADA_FILESYS_NONE)
     {
@@ -424,6 +428,9 @@ void initGame()
 
     count_player_die = 0;
     count_player_win = 0;
+
+    //On converti la palette RGB en 565
+    convertPalette();
 
     initWorld();
     postInitWorld();
@@ -608,7 +615,7 @@ void set_splash_fx(bool bSplashIn = true)
 void set_touched()
 {
     // @todo : gerer les type de monstres
-    if (Player.fTouchCountDown == 0)
+    if (Player.fTouchCountDown <= 0)
     {
         Player.health -= 10;
 
@@ -620,7 +627,7 @@ void set_touched()
             //Player.anim_frame = PLAYER_FRAME_TOUCH_1;
             //Player.current_framerate = 0;
         }
-        else if (Player.fTouchCountDown == 0)
+        else
         {
             set_dying();
         }
@@ -3364,10 +3371,10 @@ void checkPlayerInputs()
     {
         //Menu personnage
         if (gameState == STATE_GAME_MENU)
-            gameState = STATE_PLAYING;
+            changeState(STATE_PLAYING);
         else if (gameState == STATE_PLAYING)
         {
-            gameState = STATE_GAME_MENU;
+            changeState(STATE_GAME_MENU);
         }
     }
     //@todo : virer le test onGround pour attaques aeriennes..
@@ -3739,7 +3746,7 @@ void displayGameMenu()
 {
     static int menu_page = 0;
 
-    const char *titles[] = {"Personnage", "Inventaire", "Craft", "Sauv."};
+    const char *titles[] = {"Personnage", "Inventaire", "Craft", "Sauv.", "Debug."};
     //Onglets : character, inventaire, crafting
     int ret = 0;
     do
@@ -3747,51 +3754,64 @@ void displayGameMenu()
         arcada.display->fillScreen(ARCADA_MAROON);
         switch (menu_page)
         {
-        case 0:
-        {
-            const char *selection[] = {"Force", "Magie"};
-            ret = Game_Menu(titles[menu_page], selection, 2, ARCADA_WHITE, ARCADA_BLACK);
-            break;
-        }
-        case 1:
-        {
-            const char *selection[] = {"Armes", "Armures"};
-            ret = Game_Menu(titles[menu_page], selection, 2, ARCADA_WHITE, ARCADA_BLACK);
-            break;
-        }
-        case 2:
-        {
-            const char *selection[] = {"Armes", "Armures"};
-            ret = Game_Menu(titles[menu_page], selection, 2, ARCADA_WHITE, ARCADA_BLACK);
-            break;
-        }
-        case 3:
-        {
-            const char *selection[] = {"Emplacement 1", "Emplacement 2", "Emplacement 3", "Emplacement 4", "Emplacement 5"};
-            ret = Game_Menu(titles[menu_page], selection, 5, ARCADA_WHITE, ARCADA_BLACK);
-            if (ret >= 0 && ret <= 4)
+            case 0:
             {
-                //Save
-                if (SaveGame(ret + 1))
+                const char *selection[] = {"Force", "Magie"};
+                ret = Game_Menu(titles[menu_page], selection, 2, ARCADA_WHITE, ARCADA_BLACK);
+                break;
+            }
+            case 1:
+            {
+                const char *selection[] = {"Armes", "Armures"};
+                ret = Game_Menu(titles[menu_page], selection, 2, ARCADA_WHITE, ARCADA_BLACK);
+                break;
+            }
+            case 2:
+            {
+                const char *selection[] = {"Armes", "Armures"};
+                ret = Game_Menu(titles[menu_page], selection, 2, ARCADA_WHITE, ARCADA_BLACK);
+                break;
+            }
+            case 3:
+            {
+                const char *selection[] = {"Emplacement 1", "Emplacement 2", "Emplacement 3", "Emplacement 4", "Emplacement 5"};
+                ret = Game_Menu(titles[menu_page], selection, 5, ARCADA_WHITE, ARCADA_BLACK);
+                if (ret >= 0 && ret <= 4)
                 {
-                    arcada.infoBox("Sauvegarde OK.", ARCADA_BUTTONMASK_A);
+                    //Save
+                    if (SaveGame(ret + 1))
+                    {
+                        arcada.infoBox("Sauvegarde OK.", ARCADA_BUTTONMASK_A);
+                        ret = 255;
+                    }
+                    else
+                        arcada.errorBox("Erreur !", ARCADA_BUTTONMASK_A);
+                }
+                break;
+            }
+            case 4:
+            {
+                const char *selection[] = {"Capture Ecr"};
+                ret = Game_Menu(titles[menu_page], selection, 1, ARCADA_WHITE, ARCADA_BLACK);
+                if (ret == 0)
+                {
+                    //On programme une capture d'ecr juste apres avoir quitte le menu
+                    arcada.infoBox("Capture bientot.", ARCADA_BUTTONMASK_A);
+                    bCaptureEcran = true;
                     ret = 255;
                 }
-                else
-                    arcada.errorBox("Erreur !", ARCADA_BUTTONMASK_A);
+                break;
             }
-            break;
-        }
         }
         if (ret == 127)
         {
             menu_page++;
-            if (menu_page > 3)
+            if (menu_page > 4)
                 menu_page = 0;
         }
     } while (ret != 255);
 
-    gameState = STATE_PLAYING;
+    changeState(STATE_PLAYING);
 }
 
 static uint8_t maxCharPerLine, fontSize;
@@ -3992,6 +4012,43 @@ bool SaveGame(uint8_t numEmplacement)
     return ret;
 }
 
+
+bool SaveCanvas()
+{
+    bool ret = false;
+
+    char fileName[80];
+
+    sprintf(fileName, "/canvas_%02d.dat", numCapture++);
+    //Enreg du fichier
+    File data = arcada.open(fileName, (O_RDWR | O_CREAT | O_TRUNC));
+    //read player stats
+    //read ennemies, items, etc.
+    //read world
+    if (data)
+    {
+        for (int pY = 0; pY < ARCADA_TFT_HEIGHT; pY++)
+        {
+            for (int pX = 0; pX < ARCADA_TFT_WIDTH; pX++)
+            {
+                uint16_t value = canvas->getPixel(pX, pY);
+                uint8_t value1 = (value >> 8);
+                data.write(value1);
+                value1 = (value & 0x00FF);
+                data.write(value1);
+            }
+        }
+        data.flush();
+        data.close();
+
+        ret = true;
+    }
+    //On reforce pour le time elapsed (la sauvegarde a pris du temps)
+    changeState(STATE_PLAYING);
+    return ret;
+}
+
+
 void updatePauseMenu()
 {
 }
@@ -4005,11 +4062,11 @@ void displayPauseMenu()
 
     if (selected == 0)
     {
-        gameState = STATE_PLAYING;
+        changeState(STATE_PLAYING);
     }
     else
     {
-        gameState = STATE_PLAYING;
+        changeState(STATE_PLAYING);
     }
 }
 void updateMainMenu()
@@ -4029,7 +4086,7 @@ void displayMainMenu()
         //Create player...etc
         // @todo finir
         initGame();
-        gameState = STATE_PLAYING;
+        changeState(STATE_PLAYING);
     }
     else if (selected == 1)
     {
@@ -4046,7 +4103,7 @@ void displayMainMenu()
             if (LoadGame(selected_empl + 1))
             {
                 arcada.infoBox("Chargement OK.", ARCADA_BUTTONMASK_A);
-                gameState = STATE_PLAYING;
+                changeState(STATE_PLAYING);
             }
             else
                 arcada.errorBox("Erreur.", ARCADA_BUTTONMASK_A);
@@ -4131,7 +4188,7 @@ void anim_player_idle()
         Player.anim_frame = PLAYER_FRAME_IDLE_1;
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_digging()
@@ -4148,7 +4205,7 @@ void anim_player_digging()
         Player.anim_frame = PLAYER_FRAME_ACTION_1;
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_wall_climbin()
@@ -4165,7 +4222,7 @@ void anim_player_wall_climbin()
         Player.anim_frame = PLAYER_FRAME_WALL_CLIMBING_1; 
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_wall_sliding()
@@ -4182,7 +4239,7 @@ void anim_player_wall_sliding()
         Player.anim_frame = PLAYER_FRAME_SLIDING_1; //On reste sur 1
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_walk()
@@ -4199,7 +4256,7 @@ void anim_player_walk()
         Player.anim_frame = PLAYER_FRAME_RUN_1;
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_ledge_climbing()
@@ -4225,7 +4282,7 @@ void anim_player_ledge_climbing()
         return;
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_wall_jumping()
@@ -4242,7 +4299,7 @@ void anim_player_wall_jumping()
         Player.anim_frame = PLAYER_FRAME_WALL_JUMP_1; 
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_double_jump()
@@ -4259,7 +4316,7 @@ void anim_player_double_jump()
         Player.anim_frame = PLAYER_FRAME_SALTO_1; 
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_jump()
@@ -4276,7 +4333,7 @@ void anim_player_jump()
         Player.anim_frame = PLAYER_FRAME_JUMP_4; //On reste sur 5
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_falling()
@@ -4294,7 +4351,7 @@ void anim_player_falling()
         Player.anim_frame = PLAYER_FRAME_FALLING_1;
     }
 
-    drawSpriteSheet(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, player_sheet.pixel_data, Player.anim_frame, Player.pos.direction);
+    drawSpriteSheet8B(Player.pos.pX - cameraX + PLAYER_X_OFFSET, Player.pos.pY - cameraY + PLAYER_Y_OFFSET, PLAYER_WIDTH, PLAYER_HEIGHT, adventurer_lite_raw, Player.anim_frame, Player.pos.direction);
 }
 
 void anim_player_mining()
@@ -4470,6 +4527,12 @@ void displayGame()
     //canvas->fillScreen(0x867D); //84ceef
 
     drawWorld();
+    if (bCaptureEcran)
+    {
+        //Sauvegarde du canvas
+        SaveCanvas();
+        bCaptureEcran = false;
+    }
 
     //arcada.display->display();
     arcada.blitFrameBuffer(0, 0, false, false);

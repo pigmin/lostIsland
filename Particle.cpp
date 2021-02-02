@@ -122,8 +122,8 @@ void Particles::createExplosion(float x, float y, int num_parts, float xspeed, f
         particle.h = particle.w;
         particle.life = life;
         particle.weight = 1;
-        particle.velX = xspeed*(rand() % 70) - 35;
-        particle.velY = yspeed*(rand() % 60) - 40;
+        particle.velX = xspeed*(rand() % 80) - 40;
+        particle.velY = yspeed*(rand() % 70) - 45;
         particle.color = color;
         particle.color2 = color2;
         
@@ -184,8 +184,8 @@ void Particles::createBodyExplosion(float x, float y, int num_parts, uint16_t co
         particle.h = particle.w;
         particle.life = life;
         particle.weight = 1;
-        particle.velX = (rand() % 70) - 35;
-        particle.velY = (rand() % 60) - 40;
+        particle.velX = (rand() % 80) - 40;
+        particle.velY = (rand() % 70) - 45;
         particle.color = color;
         particle.color2 = color2;
         

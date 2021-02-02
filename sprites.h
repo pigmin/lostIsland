@@ -2,9 +2,9 @@
 #define SPRITES_H
 
    #define PLAYER_X_OFFSET -3
-   #define PLAYER_Y_OFFSET -4
+   #define PLAYER_Y_OFFSET -3
    #define PLAYER_WIDTH 23
-   #define PLAYER_HEIGHT 19
+   #define PLAYER_HEIGHT 20
 
 
    #define PLAYER_STATE_IDLE              0
@@ -119,6 +119,11 @@
    #define PLAYER_GROW_FRAMES  (FPS*2) 
    #define PLAYER_TOUCH_FRAMES  (FPS*2) 
 
+
+const float ledgeClimbXOffset1 = -2.0f;
+const float ledgeClimbYOffset1 = 0.0f;
+const float ledgeClimbXOffset2 = -5.0f;
+const float ledgeClimbYOffset2 = 0.0f;
 
 #define  FX_NONE           0
 #define  FX_DOUBLE_JUMP    1

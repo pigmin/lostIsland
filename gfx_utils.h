@@ -8,6 +8,9 @@
 #define PLAYER_LIGHT_INTENSITY 1024
 #define AMBIENT_LIGHT_INTENSITY 28
 
+void convertPalette();
+
+void drawSpriteSheet8B(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, uint16_t frame = 0, int8_t DIR = 1, int light = -1);
 void drawSpriteSheet(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, uint16_t frame = 0, int8_t DIR = 1, int light = -1);
 
 void drawSprite(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, int8_t DIR = 1, int light = -1);

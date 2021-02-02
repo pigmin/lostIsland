@@ -1,5 +1,5 @@
-
-#include "res2/player_sheet_v3.c"
+//#include "res2/player_sheet_v3.c"
+#include "res2/adventurer_lite.raw.h"
 
 #include "res2/jump_dust_vertical.c"
 

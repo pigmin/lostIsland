@@ -1,11 +1,14 @@
 #include <Adafruit_Arcada.h>
 #include <Adafruit_GFX.h>
 
+
 #include "gfx_utils.h"
 #include "WaterSim.h"
+#include "res2/adventurer_lite.raw.pal.h"
 
 extern GFXcanvas16 *canvas;
 
+uint16_t SPRITES_PAL[256] = { 0xF81F };
 /*
 void PixelGameEngine::DrawSprite(int32_t x, int32_t y, Sprite* sprite, uint32_t scale, uint8_t flip)
 	{
@@ -41,6 +44,103 @@ void PixelGameEngine::DrawSprite(int32_t x, int32_t y, Sprite* sprite, uint32_t 
 		}
 	}
   */
+
+ void convertPalette()
+ {
+   memset(SPRITES_PAL, 0, sizeof(SPRITES_PAL));
+   for (uint16_t palIdx = 0; palIdx < sizeof(adventurer_lite_raw_pal) / 3; palIdx++)
+   {
+     uint8_t red = adventurer_lite_raw_pal[palIdx*3];
+     uint8_t green = adventurer_lite_raw_pal[palIdx*3 + 1];
+     uint8_t blue = adventurer_lite_raw_pal[palIdx*3 + 2];
+
+     uint16_t col565 = RGBConvert(red, green, blue);
+Serial.printf("Idx:%d Col:%d\n", palIdx, col565);
+     SPRITES_PAL[palIdx] = col565;
+   }
+ }
+
+void drawSpriteSheet8B(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, uint16_t frame, int8_t DIR, int light)
+{
+  uint32_t idx = 0;
+
+  idx = frame * width * height;
+  
+  if (light < 0)
+  {
+
+    if (DIR > 0)
+    {
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint8_t bmp = bitmap[idx++];
+          if (bmp != 0)
+          {
+            uint16_t value = SPRITES_PAL[bmp];
+            canvas->drawPixel(xMove + i, yMove, value);
+          }
+        }
+        //    Serial.println("");
+      }
+    }
+    else
+    {
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint8_t bmp = bitmap[idx++];
+          if (bmp != 0)
+          {
+            uint16_t value = SPRITES_PAL[bmp];
+            canvas->drawPixel((xMove + width - 1) - i, yMove, value);
+          }
+        }
+        //    Serial.println("");
+      }
+    }
+  }
+  else
+  {
+    if (DIR > 0)
+    {
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint8_t bmp = bitmap[idx++];
+          if (bmp != 0)
+          {
+            uint16_t value = SPRITES_PAL[bmp];
+            canvas->drawPixel(xMove + i, yMove, lightBlendRGB565(value, light));
+          }
+        }
+        //    Serial.println("");
+      }
+    }
+    else
+    {
+      for (int16_t j = 0; j < height; j++, yMove++)
+      {
+        for (int16_t i = 0; i < width; i++)
+        {
+          uint8_t bmp = bitmap[idx++];
+          if (bmp != 0)
+          {
+            uint16_t value = SPRITES_PAL[bmp];
+            canvas->drawPixel((xMove + width - 1) - i, yMove, lightBlendRGB565(value, light));
+          }
+        }
+        //    Serial.println("");
+      }
+    }
+  }
+
+  //  Serial.println("");
+}
+
 
 void drawSpriteSheet(int16_t xMove, int16_t yMove, int16_t width, int16_t height, const unsigned char *bitmap, uint16_t frame, int8_t DIR, int light)
 {
